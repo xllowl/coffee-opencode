@@ -216,9 +216,16 @@ const Views = (() => {
       </article>`;
   }
 
-  /** 探店卡片：店名 + 品种胶囊 + 评分/价格 */
+  /** 探店卡片：店名 + 品种胶囊 + 品类专属信息 + 评分/价格 */
   function visitCard(v) {
     const notes = (v.notes || '').trim();
+    // 奶咖显示意式豆种类；手冲显示 产地+豆种+处理法
+    let extra = '';
+    if (v.drinkType === '奶咖' && v.espressoBean) extra = ` · ${v.espressoBean}`;
+    else if (v.drinkType === '手冲') {
+      const beanStr = [v.beanOrigin, v.beanVariety, v.beanProcess].filter(Boolean).join(' ');
+      if (beanStr) extra = ` · ${beanStr}`;
+    }
     return `
       <article class="card entry-card" data-kind="visit" data-id="${v.id}">
         <div class="ec-head">
@@ -230,7 +237,7 @@ const Views = (() => {
           <div class="ec-main">
             <div class="ec-bean">🏪 ${esc(v.shopName)}</div>
             <div class="ec-meta">
-              <span class="pill pill-visit">${esc(v.drinkType || '其他')}</span>${esc(v.drinkName || '')}${v.price != null ? ` · ¥${v.price}` : ''}
+              <span class="pill pill-visit">${esc(v.drinkType || '其他')}</span>${esc(v.drinkName || '')}${esc(extra)}${v.price != null ? ` · ¥${v.price}` : ''}
             </div>
           </div>
         </div>
@@ -1136,14 +1143,17 @@ const Views = (() => {
   }
 
   /* ================= 4b. 探店记录表单 ================= */
-  // 出品品种：四大类；奶咖内置常见品类，datalist 之外可直接输入自定义品种
-  const DRINK_TYPES = ['黑咖', '奶咖', '特调', '其他'];
+  // 出品品种：五大类；datalist 之外可直接输入自定义品种
+  const DRINK_TYPES = ['黑咖', '奶咖', '手冲', '特调', '其他'];
   const DRINK_SUGGESTIONS = {
-    '黑咖': ['美式', '手冲单品', '冷萃', '浓缩', 'Long Black', '滴滤咖啡'],
+    '黑咖': ['美式', '冷萃', '浓缩', 'Long Black', '滴滤咖啡'],
     '奶咖': ['拿铁', '卡布奇诺', 'Flat White', '澳白', 'Dirty', '燕麦拿铁', '摩卡', '焦糖玛奇朵', '短笛'],
+    '手冲': ['手冲单品', '冰手冲', '聪明杯', '虹吸', '爱乐压'],
     '特调': ['特调', '气泡美式', '橙C美式', '生椰拿铁', '阿芙佳朵', '柠檬冷萃'],
     '其他': ['无咖啡因', '抹茶拿铁', '热巧克力', '康宝蓝'],
   };
+  // 奶咖的意式豆种类选项（同样支持自定义输入）
+  const ESPRESSO_BEANS = ['深烘拼配', '中烘拼配', '中浅烘拼配', 'SOE 单品', '低因拼配'];
 
   async function visitForm(id) {
     const editing = id ? await Store.visits.get(id) : null;
@@ -1175,6 +1185,29 @@ const Views = (() => {
             <input name="drinkName" list="drink-list" value="${esc(editing?.drinkName || '')}" placeholder="如 Dirty / 燕麦拿铁 / 店家特调">
             <datalist id="drink-list"></datalist>
           </label>
+          <!-- 奶咖专属：意式豆种类 -->
+          <div id="espresso-bean-sec" style="display:none;">
+            <label class="f-label">意式豆种类（可选择，也可自定义）
+              <input name="espressoBean" list="espresso-bean-list" value="${esc(editing?.espressoBean || '')}" placeholder="如 深烘拼配 / SOE">
+              <datalist id="espresso-bean-list">
+                ${ESPRESSO_BEANS.map((d) => `<option value="${esc(d)}">`).join('')}
+              </datalist>
+            </label>
+          </div>
+          <!-- 手冲专属：豆子品种信息（可由拍照识别自动填充） -->
+          <div id="pour-bean-sec" style="display:none;">
+            <div class="f-label" style="margin-bottom:-4px;">手冲豆信息</div>
+            <div class="f-row">
+              <label class="f-label">产地<input name="beanOrigin" value="${esc(editing?.beanOrigin || '')}" placeholder="如 埃塞俄比亚"></label>
+              <label class="f-label">豆种<input name="beanVariety" value="${esc(editing?.beanVariety || '')}" placeholder="如 瑰夏"></label>
+            </div>
+            <label class="f-label">处理法
+              <input name="beanProcess" list="process-list" value="${esc(editing?.beanProcess || '')}" placeholder="如 水洗 / 日晒">
+              <datalist id="process-list">
+                ${PROCESSES.map((p) => `<option value="${esc(p)}">`).join('')}
+              </datalist>
+            </label>
+          </div>
           <div class="slider-row">
             <div class="sl-head"><span>评分</span><span class="sl-val" id="sv-rating">${editing?.rating ?? 7}</span></div>
             <input type="range" min="0" max="10" step="0.5" value="${editing?.rating ?? 7}" name="rating">
@@ -1193,17 +1226,25 @@ const Views = (() => {
 
     const form = $('#visit-form');
 
+    // 按品类显示专属区域：奶咖 → 意式豆种类；手冲 → 手冲豆信息
+    const syncDrinkSections = () => {
+      $('#espresso-bean-sec').style.display = drinkType === '奶咖' ? '' : 'none';
+      $('#pour-bean-sec').style.display = drinkType === '手冲' ? '' : 'none';
+    };
+
     // 品种联想随 drinkType 切换；自定义品种直接输入即可（datalist 不限制输入）
     const updateSuggestions = () => {
       $('#drink-list').innerHTML = (DRINK_SUGGESTIONS[drinkType] || []).map((d) => `<option value="${esc(d)}">`).join('');
     };
     updateSuggestions();
+    syncDrinkSections();
     $('#drink-pills').addEventListener('click', (e) => {
       const pill = e.target.closest('.drink-pill');
       if (!pill) return;
       drinkType = pill.dataset.t;
       $$('.drink-pill').forEach((x) => x.classList.toggle('sel', x === pill));
       updateSuggestions();
+      syncDrinkSections();
     });
 
     // 评分滑块实时数值
@@ -1247,13 +1288,17 @@ const Views = (() => {
       $('#btn-retry')?.addEventListener('click', () => { if (photo) runRecognize(); });
     }
 
-    /** 识别结果回填：仅覆盖非空字段；drinkType 归一化到四大类 */
+    /** 识别结果回填：仅覆盖非空字段；drinkType 归一化到五大类 */
     function fillForm(info) {
       const setVal = (name, v) => { if (v != null && v !== '') form.elements[name].value = v; };
       setVal('shopName', info.shopName);
       setVal('location', info.location);
       setVal('drinkName', info.drinkName);
       setVal('notes', info.notes);
+      setVal('espressoBean', info.espressoBean);       // 奶咖：意式豆种类
+      setVal('beanOrigin', info.beanOrigin);           // 手冲：产地
+      setVal('beanVariety', info.beanVariety);         // 手冲：豆种
+      setVal('beanProcess', info.beanProcess);         // 手冲：处理法
       if (info.price != null && info.price !== '') form.elements.price.value = num(info.price);
       if (info.drinkType) {
         const hit = DRINK_TYPES.find((t) => String(info.drinkType).includes(t));
@@ -1263,6 +1308,7 @@ const Views = (() => {
           updateSuggestions();
         }
       }
+      syncDrinkSections(); // 按识别出的品类展开对应区域
     }
 
     /* ---- 保存 ---- */
@@ -1278,6 +1324,11 @@ const Views = (() => {
         location: orNull(form.elements.location.value),
         drinkType,
         drinkName: orNull(form.elements.drinkName.value),
+        // 品类专属字段：仅对应品类下保存，其余置 null
+        espressoBean: drinkType === '奶咖' ? orNull(form.elements.espressoBean.value) : null,
+        beanOrigin: drinkType === '手冲' ? orNull(form.elements.beanOrigin.value) : null,
+        beanVariety: drinkType === '手冲' ? orNull(form.elements.beanVariety.value) : null,
+        beanProcess: drinkType === '手冲' ? orNull(form.elements.beanProcess.value) : null,
         price: form.elements.price.value !== '' ? num(form.elements.price.value) : null,
         rating: num(form.elements.rating.value, 7),
         notes: form.elements.notes.value || '',

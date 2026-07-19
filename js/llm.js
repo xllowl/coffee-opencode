@@ -54,11 +54,15 @@ const LLM = (() => {
   "shopName": "咖啡馆名称",
   "location": "地址/城市",
   "drinkName": "饮品名称（翻译为中文，可附原文）",
-  "drinkType": "黑咖|奶咖|特调|其他",
+  "drinkType": "黑咖|奶咖|手冲|特调|其他",
   "price": 数字（单价，无法确定填 null）,
-  "notes": "杯量/温度/豆子/做法等补充信息"
+  "espressoBean": "意式豆种类：深烘拼配|中烘拼配|中浅烘拼配|SOE|低因拼配（仅奶咖类填写，菜单注明用豆时）",
+  "beanOrigin": "产地国家（仅手冲类填写）",
+  "beanVariety": "豆种，如 瑰夏/铁皮卡/波旁/卡杜拉/SL28/原生种（仅手冲类填写）",
+  "beanProcess": "处理法：水洗|日晒|蜜处理|厌氧日晒|酒桶发酵|湿刨|其他（仅手冲类填写）",
+  "notes": "杯量/温度/做法等补充信息"
 }
-规则：无法确定的字段填 null；drinkType 必须归一化到给定枚举；含牛奶或植物奶的饮品（拿铁/卡布奇诺/Dirty/Flat White/澳白/摩卡/燕麦拿铁等）必须归类为奶咖；菜单上有多个饮品时选最招牌或最清晰的一个。`;
+规则：无法确定的字段填 null；drinkType 必须归一化到给定枚举：含牛奶或植物奶的饮品（拿铁/卡布奇诺/Dirty/Flat White/澳白/摩卡/燕麦拿铁等）归奶咖；手冲/单品/精品滴滤归手冲；美式/冷萃/浓缩归黑咖；菜单上有多个饮品时选最招牌或最清晰的一个；espressoBean 和 beanProcess 必须归一化到给定枚举。`;
 
   /** 读取设置（localStorage 键：coffee_settings） */
   function getSettings() {
