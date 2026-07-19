@@ -15,8 +15,11 @@
   <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
-  <!-- 深咖啡色顶栏 -->
-  <header class="topbar"><h1>咖啡手账</h1></header>
+  <!-- 深咖啡色顶栏（右侧地球入口直达产地地图） -->
+  <header class="topbar">
+    <h1>咖啡手账</h1>
+    <a class="topbar-map" href="#/map" aria-label="世界产地地图">🌍</a>
+  </header>
 
   <!-- SPA 视图容器：所有页面由 js/views.js 渲染进这里 -->
   <main id="view"><div class="page-loading">加载中…</div></main>
@@ -36,6 +39,7 @@
   <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="./js/store.js"></script>
+  <script src="./js/worldmap.js"></script>
   <script src="./js/image.js"></script>
   <script src="./js/llm.js"></script>
   <script src="./js/views.js"></script>

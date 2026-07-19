@@ -115,11 +115,13 @@ const Views = (() => {
   /* ================= 图表 / 计时器清理 ================= */
   let charts = [];
   let timers = [];
+  let mapResize = null; // 地图页的窗口resize监听，离开视图时移除
   function cleanup() {
     charts.forEach((c) => { try { c.destroy(); } catch { /* 忽略 */ } });
     charts = [];
     timers.forEach((t) => clearInterval(t));
     timers = [];
+    if (mapResize) { window.removeEventListener('resize', mapResize); mapResize = null; }
   }
 
   /**
@@ -1099,6 +1101,170 @@ const Views = (() => {
     }
   }
 
+  /* ================= 5b. 世界产地地图 ================= */
+  let mapState = null; // { groups, bubbles, sel }：聚合结果 / 气泡位置（点击命中用）/ 选中国家
+
+  async function mapView() {
+    const [beans, entries] = await Promise.all([Store.beans.getAll(), Store.entries.getAll()]);
+
+    // 每支豆子的杯数与平均评分
+    const stat = {};
+    entries.forEach((e) => {
+      const s = (stat[e.beanId] = stat[e.beanId] || { cups: 0, sum: 0, n: 0 });
+      s.cups++;
+      if (e.tasting?.score != null) { s.sum += num(e.tasting.score); s.n++; }
+    });
+
+    // 按产国聚合（bean.origin → 国家质心，匹配不到归入 unmatched）
+    const agg = {};
+    const unmatched = [];
+    beans.forEach((b) => {
+      const c = WorldMap.match(b.origin);
+      if (!c) { if (b.origin) unmatched.push(b); return; }
+      const g = (agg[c.key] = agg[c.key] || { country: c, cups: 0, beans: [] });
+      const st = stat[b.id] || { cups: 0 };
+      g.cups += st.cups;
+      g.beans.push({ bean: b, cups: st.cups, avg: st.n ? st.sum / st.n : null });
+    });
+    const groups = Object.values(agg).sort((a, b) => b.cups - a.cups);
+    mapState = { groups, bubbles: [], sel: groups[0]?.country.key || null };
+
+    view().innerHTML = `
+      <section class="page">
+        <h2 class="page-title">世界产地地图</h2>
+        <div class="stat-cards">
+          <div class="card stat-card"><div class="sc-num">${groups.length}</div><div class="sc-label">喝过产国</div></div>
+          <div class="card stat-card"><div class="sc-num">${beans.filter((b) => b.origin).length}</div><div class="sc-label">有产地豆子</div></div>
+          <div class="card stat-card"><div class="sc-num">${entries.length}</div><div class="sc-label">总杯数</div></div>
+        </div>
+        ${groups.length ? `
+        <div class="card map-card">
+          <canvas id="world-map"></canvas>
+          <div class="map-legend"><span class="dot-demo"></span>陆地　<span class="bubble-demo"></span>气泡大小 = 杯数，点击看明细</div>
+        </div>
+        <div class="map-chips" id="map-chips">
+          ${groups.map((g) => `<button class="map-chip ${g.country.key === mapState.sel ? 'sel' : ''}" data-key="${g.country.key}">${esc(g.country.zh)} ${g.cups}杯</button>`).join('')}
+        </div>
+        <div id="map-detail"></div>` : emptyHtml('还没有带产地信息的豆子，去豆库补充产地国家吧 🌍')}
+        ${unmatched.length ? `<div class="map-unmatched">未识别产地的豆子：${unmatched.map((b) => esc(b.name)).join('、')}，可在豆库编辑补充「产地国家」</div>` : ''}
+      </section>`;
+
+    if (!groups.length) return;
+    drawWorldMap();
+    renderMapDetail();
+
+    // 国家胶囊快速定位
+    $('#map-chips').addEventListener('click', (e) => {
+      const chip = e.target.closest('.map-chip');
+      if (!chip) return;
+      mapState.sel = chip.dataset.key;
+      $$('.map-chip').forEach((x) => x.classList.toggle('sel', x === chip));
+      drawWorldMap();
+      renderMapDetail();
+    });
+
+    // 点击画布：命中最近的气泡则选中
+    $('#world-map').addEventListener('click', (ev) => {
+      const rect = ev.currentTarget.getBoundingClientRect();
+      const x = ev.clientX - rect.left, y = ev.clientY - rect.top;
+      let best = null, bd = Infinity;
+      mapState.bubbles.forEach((b) => {
+        const d = Math.hypot(b.x - x, b.y - y);
+        if (d < Math.max(b.r + 8, 22) && d < bd) { bd = d; best = b; }
+      });
+      mapState.sel = best ? best.key : null;
+      $$('.map-chip').forEach((x) => x.classList.toggle('sel', x.dataset.key === mapState.sel));
+      drawWorldMap();
+      renderMapDetail();
+    });
+
+    // 横竖屏/窗口变化时重绘
+    mapResize = () => drawWorldMap();
+    window.addEventListener('resize', mapResize);
+  }
+
+  /** Canvas 绘制：陆地点阵 + 产国气泡 */
+  function drawWorldMap() {
+    const canvas = $('#world-map');
+    if (!canvas || !mapState) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth;
+    if (!w) return;
+    const h = Math.round((w * WorldMap.H) / WorldMap.W);
+    canvas.style.height = h + 'px';
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    // 1) 陆地点阵（纸张色小圆点）
+    const dx = w / WorldMap.W, dy = h / WorldMap.H;
+    const dotR = Math.max(0.6, Math.min(dx, dy) * 0.36);
+    ctx.fillStyle = '#dcc9ac';
+    for (let row = 0; row < WorldMap.H; row++) {
+      const line = WorldMap.GRID[row];
+      for (let col = 0; col < WorldMap.W; col++) {
+        if (line[col] === '1') {
+          ctx.beginPath();
+          ctx.arc((col + 0.5) * dx, (row + 0.5) * dy, dotR, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    // 2) 产国气泡（杯数开平方映射半径，避免悬殊过大）
+    mapState.bubbles = [];
+    const maxCups = Math.max(1, ...mapState.groups.map((g) => g.cups));
+    mapState.groups.forEach((g) => {
+      const { x, y } = WorldMap.project(g.country.lat, g.country.lng, w, h);
+      const isSel = g.country.key === mapState.sel;
+      const br = g.cups > 0
+        ? Math.min(7 + Math.sqrt(g.cups / maxCups) * (w * 0.05), w * 0.075)
+        : 4; // 有豆未冲：空心小点
+      mapState.bubbles.push({ key: g.country.key, x, y, r: br });
+      if (isSel) { // 选中高亮光环
+        ctx.beginPath(); ctx.arc(x, y, br + 4, 0, Math.PI * 2);
+        ctx.strokeStyle = '#c08552'; ctx.lineWidth = 2; ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(x, y, br, 0, Math.PI * 2);
+      if (g.cups > 0) {
+        ctx.fillStyle = 'rgba(111,78,55,.92)';
+        ctx.fill();
+        ctx.lineWidth = 1.5; ctx.strokeStyle = '#fffdf8'; ctx.stroke();
+        if (br >= 9) { // 气泡够大时写入杯数
+          ctx.fillStyle = '#fffdf8';
+          ctx.font = `bold ${Math.max(9, br * 0.72)}px Georgia`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(String(g.cups), x, y + 0.5);
+        }
+      } else {
+        ctx.fillStyle = '#fffdf8'; ctx.fill();
+        ctx.lineWidth = 1.5; ctx.strokeStyle = '#6f4e37'; ctx.stroke();
+      }
+    });
+  }
+
+  /** 选中国家的明细卡片 */
+  function renderMapDetail() {
+    const box = $('#map-detail');
+    if (!box || !mapState) return;
+    const g = mapState.groups.find((x) => x.country.key === mapState.sel);
+    if (!g) { box.innerHTML = ''; return; }
+    box.innerHTML = `
+      <div class="card">
+        <div class="map-detail-head">
+          <span class="map-detail-title">📍 ${esc(g.country.zh)}</span>
+          <span class="map-detail-sub">${g.beans.length} 支豆 · ${g.cups} 杯</span>
+        </div>
+        ${g.beans.sort((a, b) => b.cups - a.cups).map(({ bean, cups, avg }) => `
+          <div class="list-row">
+            <span class="lr-name">${esc(bean.name)}</span>
+            <span class="map-bean-meta">${cups} 杯${avg != null ? ' · ★' + avg.toFixed(1) : ''}</span>
+          </div>`).join('')}
+      </div>`;
+  }
+
   /* ================= 5. 统计页 ================= */
   async function stats() {
     const [entries, beans, preps] = await Promise.all([
@@ -1152,6 +1318,7 @@ const Views = (() => {
           <div class="card stat-card"><div class="sc-num">${streak}</div><div class="sc-label">连续冲煮天数</div></div>
           <div class="card stat-card"><div class="sc-num">${activeBeans}</div><div class="sc-label">在喝豆子</div></div>
         </div>
+        <a class="card map-entry" href="#/map">🌍 世界产地地图 · 看看咖啡来自哪里 ›</a>
         <div class="card chart-card"><h3>五维平均分</h3><div class="chart-box"><canvas id="c-radar"></canvas></div></div>
         <div class="card chart-card"><h3>豆子杯数排行</h3><div class="chart-box"><canvas id="c-bar"></canvas></div></div>
         <div class="card chart-card"><h3>评分趋势</h3><div class="chart-box"><canvas id="c-line"></canvas></div></div>
@@ -1332,6 +1499,7 @@ const Views = (() => {
       case 'bean':     return beanForm(b === 'edit' ? c : null);
       case 'entry':    return entryForm(b === 'edit' ? c : null);
       case 'stats':    return stats();
+      case 'map':      return mapView();
       case 'settings': return settingsPage();
       default:         return timeline();
     }

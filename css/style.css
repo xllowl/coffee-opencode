@@ -48,6 +48,15 @@ body {
   letter-spacing: 6px;
   font-weight: 700;
 }
+/* 顶栏右侧：世界地图入口 */
+.topbar-map {
+  position: absolute; right: 16px; top: 0; bottom: 0;
+  display: flex; align-items: center;
+  font-size: 20px; text-decoration: none;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .3));
+  transition: transform .1s ease;
+}
+.topbar-map:active { transform: scale(.9); }
 
 /* ---------------- 视图容器 ---------------- */
 #view { max-width: 640px; margin: 0 auto; padding: 14px 14px 24px; }
@@ -366,6 +375,33 @@ input[type=range]::-moz-range-thumb {
 .chart-card { padding: 14px; }
 .chart-card h3 { margin: 0 0 10px; font-size: 15px; font-family: 'LXGW Wenkai', serif; color: var(--coffee); }
 .chart-box { position: relative; height: 240px; }
+
+/* ---------------- 世界产地地图 ---------------- */
+.map-card { padding: 10px; }
+#world-map { width: 100%; display: block; }
+.map-legend {
+  font-size: 12px; color: var(--muted); text-align: center; padding-top: 8px;
+  display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap;
+}
+.dot-demo { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #dcc9ac; }
+.bubble-demo { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--coffee); border: 1.5px solid var(--card); box-shadow: 0 0 0 1px var(--coffee); }
+.map-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.map-chip {
+  border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  border-radius: 999px; padding: 6px 13px; font-size: 13px;
+  font-family: inherit; cursor: pointer; transition: transform .08s ease;
+}
+.map-chip:active { transform: scale(.94); }
+.map-chip.sel { background: var(--coffee); color: #fffaf2; border-color: var(--coffee); }
+.map-detail-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+.map-detail-title { font-family: 'LXGW Wenkai', serif; font-size: 17px; }
+.map-detail-sub { font-size: 13px; color: var(--muted); }
+.map-bean-meta { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.map-unmatched { font-size: 12px; color: var(--muted); padding: 4px 6px; line-height: 1.8; }
+.map-entry {
+  display: block; text-decoration: none; text-align: center;
+  color: var(--coffee); font-family: 'LXGW Wenkai', serif; font-size: 16px;
+}
 
 /* ---------------- 设置页 ---------------- */
 .settings-sec { margin-bottom: 18px; }

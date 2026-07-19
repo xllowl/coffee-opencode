@@ -8,8 +8,8 @@
     return location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   }
 
-  // 路由首段 → 底部 Tab 的对应关系（bean 表单归属于豆库 Tab）
-  const TAB_MAP = { '': 'timeline', library: 'library', bean: 'library', entry: 'add', stats: 'stats', settings: 'settings' };
+  // 路由首段 → 底部 Tab 的对应关系（bean 表单归属于豆库 Tab，地图归属于统计 Tab）
+  const TAB_MAP = { '': 'timeline', library: 'library', bean: 'library', entry: 'add', stats: 'stats', map: 'stats', settings: 'settings' };
 
   function setActiveTab(parts) {
     const key = TAB_MAP[parts[0] || ''] || 'timeline';
