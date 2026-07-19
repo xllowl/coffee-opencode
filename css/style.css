@@ -402,6 +402,15 @@ input[type=range]::-moz-range-thumb {
   background: var(--coffee); border: 3px solid var(--card); cursor: pointer;
 }
 
+/* 风味描述小胶囊（豆库卡片 / 时间线卡片共用） */
+.flavor-chip {
+  display: inline-block; padding: 1px 8px; margin: 2px 4px 2px 0;
+  border-radius: 999px; font-size: 12px; line-height: 1.6;
+  background: #f6eee1; color: #9a7440; border: 1px solid #eddec6;
+}
+.bc-flavors { margin: 0 0 6px; }
+.ec-flavors { margin-top: 6px; }
+
 /* 探店品种胶囊（黑咖/奶咖/特调/其他） */
 .drink-pills { display: flex; gap: 8px; flex-wrap: wrap; }
 .drink-pill {

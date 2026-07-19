@@ -20,25 +20,22 @@ const Views = (() => {
   const MILL_TYPE_LABEL = { hand: '手摇', electric: '电动' };
   const ROASTS = ['浅烘', '中浅烘', '中烘', '中深烘', '深烘'];
   const PROCESSES = ['水洗', '日晒', '蜜处理', '厌氧日晒', '酒桶发酵', '湿刨', '其他'];
-  // 心情体系：FA 免费 solid 表情图标；emo 字段用于 CDN 失败降级 + 兼容旧数据中的 emoji
+  // 心情体系：原生 emoji 展示；k 字段用于兼容 FA 版本期间写入库的 key 数据
   const MOODS = [
-    { k: 'love',   ico: 'fa-face-grin-hearts', emo: '😍' },
-    { k: 'happy',  ico: 'fa-face-laugh',       emo: '😀' },
-    { k: 'smile',  ico: 'fa-face-smile',       emo: '🙂' },
-    { k: 'meh',    ico: 'fa-face-meh',         emo: '😐' },
-    { k: 'sad',    ico: 'fa-face-frown',       emo: '😞' },
-    { k: 'tired',  ico: 'fa-face-tired',       emo: '🥱' },
-    { k: 'sleepy', ico: 'fa-face-sleeping',    emo: '😴' },
-    { k: 'sick',   ico: 'fa-face-thermometer', emo: '🤒' },
+    { k: 'love',   emo: '😍' },
+    { k: 'happy',  emo: '😀' },
+    { k: 'smile',  emo: '🙂' },
+    { k: 'meh',    emo: '😐' },
+    { k: 'sad',    emo: '😞' },
+    { k: 'tired',  emo: '🥱' },
+    { k: 'sleepy', emo: '😴' },
+    { k: 'sick',   emo: '🤒' },
   ];
-  // 心情值（新=key / 旧=emoji）→ FA 类名 / 兜底 emoji
   const moodFind = (m) => MOODS.find((x) => x.k === m) || MOODS.find((x) => x.emo === m) || null;
-  const moodIconHtml = (m) => {
-    const f = moodFind(m);
-    return f ? `<i class="fa-solid ${f.ico}" data-emo="${f.emo}"></i>` : '';
-  };
+  // 心情值（key 或 emoji）→ 展示用 emoji；无法识别时原样返回
+  const moodEmoji = (m) => (moodFind(m) || {}).emo || m || '';
   const moodBtnHtml = (cur) => MOODS.map((x) =>
-    `<button type="button" class="${cur === x.k || cur === x.emo ? 'sel' : ''}" data-m="${x.k}"><i class="fa-solid ${x.ico}" data-emo="${x.emo}"></i></button>`).join('');
+    `<button type="button" class="${cur === x.k || cur === x.emo ? 'sel' : ''}" data-m="${x.emo}">${x.emo}</button>`).join('');
   const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
 
   const prettyDate = (ds) => {
@@ -224,7 +221,7 @@ const Views = (() => {
       <article class="card entry-card" data-kind="brew" data-id="${e.id}">
         <div class="ec-head">
           <span class="ec-date">${esc(prettyDate(e.date))}</span>
-          <span class="ec-mood">${moodIconHtml(e.mood)}</span>
+          <span class="ec-mood">${esc(moodEmoji(e.mood))}</span>
         </div>
         <div class="ec-bean">${esc(b ? b.name : '（豆子已删除）')}</div>
         <div class="ec-meta">${esc(p ? p.name : '—')} · 粉水比 ${ratioText(e)} · 粉 ${num(e.brew?.dose) || '-'}g</div>
@@ -232,6 +229,7 @@ const Views = (() => {
           <span class="ec-score">★ ${e.tasting?.score ?? '—'}</span>
           ${notes ? `<span class="ec-notes">${esc(notes)}</span>` : ''}
         </div>
+        ${e.tasting?.flavors?.length ? `<div class="ec-flavors">${e.tasting.flavors.map((x) => `<span class="flavor-chip">${esc(x)}</span>`).join('')}</div>` : ''}
       </article>`;
   }
 
@@ -249,7 +247,7 @@ const Views = (() => {
       <article class="card entry-card" data-kind="visit" data-id="${v.id}">
         <div class="ec-head">
           <span class="ec-date">${esc(prettyDate(v.date))}</span>
-          <span class="ec-mood">${moodIconHtml(v.mood)}</span>
+          <span class="ec-mood">${esc(moodEmoji(v.mood))}</span>
         </div>
         <div class="ec-main-row">
           ${v.photo ? `<img class="vc-photo" src="${v.photo}" alt="">` : ''}
@@ -335,6 +333,7 @@ const Views = (() => {
             ${b.roastLevel ? `<span class="pill pill-roast">${esc(b.roastLevel)}</span>` : ''}
             ${age ? `<span class="pill ${age.cls}">烘焙后第 ${age.days} 天 · ${age.label}</span>` : ''}
           </div>
+          ${b.flavorNotes?.length ? `<div class="bc-flavors">${b.flavorNotes.map((t) => `<span class="flavor-chip">${esc(t)}</span>`).join('')}</div>` : ''}
           <div class="bc-progress"><div class="bc-progress-bar" style="width:${pct}%"></div></div>
           <div class="bc-remain">剩余 ${Math.round(num(b.remainingWeight))} / ${num(b.totalWeight)} g</div>
         </div>
@@ -653,8 +652,8 @@ const Views = (() => {
         preparationId: null,
         millId: null,
         brew: { dose: 15, water: 225, temp: 92, millSetting: '', steps: [], totalTime: '', yield: null, pressure: null, extractionTime: null },
-        tasting: { acidity: 3, sweetness: 3, bitterness: 3, body: 3, aroma: 3, score: 7, notes: '' },
-        mood: 'happy',
+        tasting: { acidity: 3, sweetness: 3, bitterness: 3, body: 3, aroma: 3, score: 7, notes: '', flavors: [] },
+        mood: '😀',
       };
     }
     wizStep = 1;
@@ -736,6 +735,9 @@ const Views = (() => {
       el.addEventListener('click', () => {
         wiz.beanId = el.dataset.id;
         $$('#wiz-body .pick-item').forEach((x) => x.classList.toggle('sel', x === el));
+        // 风味描述默认带出该豆在豆库中的风味标签（第三步可自定义增减）
+        const bean = wizCtx.beans.find((b) => b.id === wiz.beanId);
+        wiz.tasting.flavors = [...(bean?.flavorNotes || [])];
         showCopyLastBtn();
       });
     });
@@ -1055,6 +1057,8 @@ const Views = (() => {
   /* ---- 第三步：品鉴 ---- */
   function renderStep3() {
     const t = wiz.tasting;
+    // 旧记录可能没有 flavors 字段，兜底为空数组
+    if (!Array.isArray(t.flavors)) t.flavors = [];
     const slider = (key, label, min, max, step) => `
       <div class="slider-row">
         <div class="sl-head"><span>${label}</span><span class="sl-val" id="sv-${key}">${t[key]}</span></div>
@@ -1070,6 +1074,11 @@ const Views = (() => {
         ${slider('body', '醇厚度', 1, 5, 0.5)}
         ${slider('aroma', '香气', 1, 5, 0.5)}
         ${slider('score', '总评分', 0, 10, 0.5)}
+        <div class="f-label" style="margin:10px 0 6px;">风味描述（默认带出豆库标签，可自定义增减）</div>
+        <div class="tag-box" id="flavor-box">
+          ${t.flavors.map((x, i) => `<span class="tag-chip">${esc(x)}<button type="button" data-i="${i}">×</button></span>`).join('')}
+          <input id="flavor-input" placeholder="回车添加，如 柑橘">
+        </div>
         <div class="f-label" style="margin:10px 0 6px;">心情</div>
         <div class="mood-row" id="mood-row">
           ${moodBtnHtml(wiz.mood)}
@@ -1119,6 +1128,25 @@ const Views = (() => {
       $$('#mood-row button').forEach((x) => x.classList.toggle('sel', x === btn));
     });
     $('#taste-notes').addEventListener('input', (e) => { t.notes = e.target.value; });
+
+    // 风味描述标签：回车添加、点 × 删除
+    const fbox = $('#flavor-box');
+    const finput = $('#flavor-input');
+    const redrawFlavors = () => {
+      $$('.tag-chip', fbox).forEach((c) => c.remove());
+      t.flavors.forEach((x, i) =>
+        finput.insertAdjacentHTML('beforebegin', `<span class="tag-chip">${esc(x)}<button type="button" data-i="${i}">×</button></span>`));
+    };
+    finput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const v = finput.value.trim();
+        if (v) { t.flavors.push(v); finput.value = ''; redrawFlavors(); }
+      }
+    });
+    fbox.addEventListener('click', (e) => {
+      if (e.target.dataset.i != null) { t.flavors.splice(+e.target.dataset.i, 1); redrawFlavors(); }
+    });
   }
 
   /* ---- 保存 / 删除记录（核心业务规则 1/2/3） ---- */
@@ -1179,7 +1207,7 @@ const Views = (() => {
     const editing = id ? await Store.visits.get(id) : null;
     let photo = editing?.photo || null;      // 压缩后的 base64 照片（饮品/菜单/店面）
     let drinkType = editing?.drinkType || '奶咖';
-    let mood = editing?.mood || 'happy';
+    let mood = editing?.mood || '😀';
 
     view().innerHTML = `
       <section class="page">
