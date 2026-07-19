@@ -183,12 +183,97 @@ const Views = (() => {
         ${items.length ? items.map((it) => it.kind === 'brew' ? entryCard(it.data, beanMap, prepMap) : visitCard(it.data)).join('') : emptyHtml('还没有记录，冲第一杯吧', 'fa-mug-hot', '☕')}
       </section>`;
 
-    // 点击卡片进入编辑（冲煮 / 探店分别跳转）
-    $$('.entry-card').forEach((card) => {
-      card.addEventListener('click', () => {
-        location.hash = (card.dataset.kind === 'visit' ? '#/visit/edit/' : '#/entry/edit/') + card.dataset.id;
+    // 绑定卡片交互：点击进编辑、左滑删除
+    openSwipe = null;
+    $$('.swipe-wrap').forEach((wrap) => {
+      bindSwipe(wrap);
+      wrap.querySelector('.entry-card').addEventListener('click', () => {
+        if (wrap.dataset.justSwiped === '1') { wrap.dataset.justSwiped = ''; return; } // 刚滑完，不触发跳转
+        if (wrap.classList.contains('swiped')) { closeSwipe(wrap); return; }             // 展开态点击 = 收起
+        location.hash = (wrap.dataset.kind === 'visit' ? '#/visit/edit/' : '#/entry/edit/') + wrap.dataset.id;
+      });
+      wrap.querySelector('.swipe-del').addEventListener('click', (e) => {
+        e.stopPropagation();
+        onSwipeDelete(wrap);
       });
     });
+  }
+
+  /* ---- 左滑删除 ---- */
+  const SWIPE_W = 88;      // 删除按钮宽度（展开位移）
+  let openSwipe = null;    // 当前处于展开态的卡片容器
+
+  function closeSwipe(wrap) {
+    const c = wrap.querySelector('.swipe-content');
+    c.style.transition = 'transform .2s ease';
+    c.style.transform = 'translateX(0)';
+    wrap.classList.remove('swiped');
+    if (openSwipe === wrap) openSwipe = null;
+  }
+
+  /** Pointer Events 统一触屏/鼠标；touch-action:pan-y 保证纵向滚动不受影响 */
+  function bindSwipe(wrap) {
+    const content = wrap.querySelector('.swipe-content');
+    let startX = 0, startY = 0, dx = 0, dragging = false, axis = null;
+
+    wrap.addEventListener('pointerdown', (e) => {
+      startX = e.clientX; startY = e.clientY;
+      dx = wrap.classList.contains('swiped') ? -SWIPE_W : 0;
+      dragging = true; axis = null;
+      content.style.transition = 'none';
+    });
+
+    wrap.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const mx = e.clientX - startX, my = e.clientY - startY;
+      if (axis === null) {
+        if (Math.abs(mx) < 8 && Math.abs(my) < 8) return;
+        axis = Math.abs(mx) > Math.abs(my) ? 'h' : 'v'; // 只在明确横向滑动时接管
+      }
+      if (axis !== 'h') return;
+      // 跟手位移：左负右正，限制在 [-SWIPE_W-24, 0]
+      dx = Math.min(0, Math.max(-SWIPE_W - 24, (wrap.classList.contains('swiped') ? -SWIPE_W : 0) + mx));
+      content.style.transform = `translateX(${dx}px)`;
+    });
+
+    const end = () => {
+      if (!dragging) return;
+      dragging = false;
+      content.style.transition = 'transform .2s ease';
+      if (axis === 'h') {
+        const shouldOpen = dx < -SWIPE_W / 2;
+        wrap.dataset.justSwiped = '1'; // 抑制紧随其后的 click 跳转
+        if (shouldOpen) {
+          if (openSwipe && openSwipe !== wrap) closeSwipe(openSwipe); // 同时只展开一张
+          wrap.classList.add('swiped');
+          content.style.transform = `translateX(${-SWIPE_W}px)`;
+          openSwipe = wrap;
+        } else {
+          closeSwipe(wrap);
+        }
+      }
+    };
+    wrap.addEventListener('pointerup', end);
+    wrap.addEventListener('pointercancel', end);
+  }
+
+  /** 左滑删除：冲煮记录回补豆量，探店记录直接删除；均二次确认 */
+  async function onSwipeDelete(wrap) {
+    const { kind, id } = wrap.dataset;
+    if (kind === 'visit') {
+      if (!(await confirmDlg('确定删除这条探店记录吗？', { danger: true, okText: '删除' }))) { closeSwipe(wrap); return; }
+      await Store.visits.remove(id);
+      toast('已删除');
+    } else {
+      const entry = await Store.entries.get(id);
+      if (!entry) { closeSwipe(wrap); return; }
+      if (!(await confirmDlg('确定删除这条冲煮记录吗？豆量会自动回补。', { danger: true, okText: '删除' }))) { closeSwipe(wrap); return; }
+      // 核心业务规则 2：删除回补 dose；原为 finished 且回补后 >0 自动恢复 active
+      await Store.adjustBeanWeight(entry.beanId, +num(entry.brew?.dose));
+      await Store.entries.remove(id);
+      toast('已删除，豆量已回补');
+    }
+    timeline(); // 重新渲染时间线
   }
 
   /** 空状态：大号装饰图标 + 文案 */
@@ -218,7 +303,9 @@ const Views = (() => {
     const p = prepMap[e.preparationId];
     const notes = (e.tasting?.notes || '').trim();
     return `
-      <article class="card entry-card" data-kind="brew" data-id="${e.id}">
+      <div class="swipe-wrap" data-kind="brew" data-id="${e.id}">
+      <div class="swipe-actions"><button type="button" class="swipe-del"><i class="fa-solid fa-trash-can" data-emo="🗑"></i>删除</button></div>
+      <article class="card entry-card swipe-content">
         <div class="ec-head">
           <span class="ec-date">${esc(prettyDate(e.date))}</span>
           <span class="ec-mood">${esc(moodEmoji(e.mood))}</span>
@@ -230,7 +317,8 @@ const Views = (() => {
           ${notes ? `<span class="ec-notes">${esc(notes)}</span>` : ''}
         </div>
         ${e.tasting?.flavors?.length ? `<div class="ec-flavors">${e.tasting.flavors.map((x) => `<span class="flavor-chip">${esc(x)}</span>`).join('')}</div>` : ''}
-      </article>`;
+      </article>
+      </div>`;
   }
 
   /** 探店卡片：店名 + 品种胶囊 + 品类专属信息 + 评分/价格 */
@@ -244,7 +332,9 @@ const Views = (() => {
       if (beanStr) extra = ` · ${beanStr}`;
     }
     return `
-      <article class="card entry-card" data-kind="visit" data-id="${v.id}">
+      <div class="swipe-wrap" data-kind="visit" data-id="${v.id}">
+      <div class="swipe-actions"><button type="button" class="swipe-del"><i class="fa-solid fa-trash-can" data-emo="🗑"></i>删除</button></div>
+      <article class="card entry-card swipe-content">
         <div class="ec-head">
           <span class="ec-date">${esc(prettyDate(v.date))}</span>
           <span class="ec-mood">${esc(moodEmoji(v.mood))}</span>
@@ -262,7 +352,8 @@ const Views = (() => {
           <span class="ec-score">★ ${v.rating ?? '—'}</span>
           ${notes ? `<span class="ec-notes">${esc(notes)}</span>` : ''}
         </div>
-      </article>`;
+      </article>
+      </div>`;
   }
 
   /* ================= 2. 豆库页 ================= */
