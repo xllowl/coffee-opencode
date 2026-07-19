@@ -104,6 +104,15 @@ body {
   cursor: pointer; transition: transform .08s ease;
 }
 .btn-hero:active { transform: scale(.97); }
+/* 首页双入口行：冲一杯 + 探店打卡 */
+.hero-row { display: flex; gap: 10px; margin: 12px 0 16px; }
+.hero-row .btn-hero { flex: 1.35; margin: 0; letter-spacing: 2px; }
+.hero-row .btn-hero-visit {
+  flex: 1;
+  color: var(--coffee); background: var(--card);
+  border: 1.5px dashed var(--accent);
+  box-shadow: var(--shadow);
+}
 
 /* 豆子表单「拍摄识别」大按钮 */
 .btn-photo {
@@ -153,6 +162,7 @@ body {
   border: 1px solid transparent;
 }
 .pill-process { background: #e7efe3; color: #57704f; border-color: #d3e2cc; } /* 处理法：柔和绿 */
+.pill-visit   { background: #e6edf1; color: #4d6472; border-color: #d3dfe6; } /* 探店品种：柔和青 */
 .pill-roast   { background: #f1e4d7; color: #8a5a34; border-color: #e6d2bd; } /* 烘焙度：柔和棕 */
 .pill-type    { background: #e9e4f1; color: #635287; border-color: #d9d0e8; } /* 器具类型：柔和紫 */
 .pill-archived{ background: #eceae6; color: #8d857c; border-color: #ddd8d0; }
@@ -179,6 +189,12 @@ body {
 
 .entry-card { cursor: pointer; }
 .entry-card:active { transform: scale(.99); }
+.ec-main-row { display: flex; gap: 10px; align-items: center; }
+.ec-main { min-width: 0; }
+.vc-photo {
+  width: 52px; height: 52px; flex: 0 0 52px;
+  border-radius: 10px; object-fit: cover; border: 1px solid var(--line);
+}
 .ec-head { display: flex; justify-content: space-between; align-items: baseline; }
 .ec-date { font-size: 13px; color: var(--muted); letter-spacing: 1px; }
 .ec-mood { font-size: 20px; }
@@ -355,6 +371,17 @@ input[type=range]::-moz-range-thumb {
   width: 16px; height: 16px; border-radius: 50%;
   background: var(--coffee); border: 3px solid var(--card); cursor: pointer;
 }
+
+/* 探店品种胶囊（黑咖/奶咖/特调/其他） */
+.drink-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+.drink-pill {
+  padding: 8px 18px; border-radius: 999px;
+  border: 1px solid var(--line); background: #fff;
+  font-family: inherit; font-size: 14px; color: var(--ink);
+  cursor: pointer; transition: transform .08s ease, background .12s;
+}
+.drink-pill:active { transform: scale(.94); }
+.drink-pill.sel { background: var(--coffee); color: #fffaf2; border-color: var(--coffee); }
 
 .mood-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .mood-row button {

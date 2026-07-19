@@ -1,14 +1,16 @@
 /* ============================================================
  * store.js — localForage 数据层
- * 四个 store：beans（咖啡豆）/ entries（冲煮记录）/
- *             preparations（冲煮器具）/ mills（磨豆机）
+ * 五个 store：beans（咖啡豆）/ entries（冲煮记录）/
+ *             preparations（冲煮器具）/ mills（磨豆机）/
+ *             visits（探店记录）
  * ============================================================ */
 const Store = (() => {
-  // 同一数据库下的四个 objectStore（localForage 底层走 IndexedDB）
+  // 同一数据库下的五个 objectStore（localForage 底层走 IndexedDB）
   const beans = localforage.createInstance({ name: 'coffee-journal', storeName: 'beans' });
   const entries = localforage.createInstance({ name: 'coffee-journal', storeName: 'entries' });
   const preparations = localforage.createInstance({ name: 'coffee-journal', storeName: 'preparations' });
   const mills = localforage.createInstance({ name: 'coffee-journal', storeName: 'mills' });
+  const visits = localforage.createInstance({ name: 'coffee-journal', storeName: 'visits' });
 
   // 通用 CRUD 包装：localForage 是 key-value 形式，getAll 通过 iterate 收集
   const wrap = (store) => ({
@@ -50,6 +52,7 @@ const Store = (() => {
     entries: wrap(entries),
     preparations: wrap(preparations),
     mills: wrap(mills),
+    visits: wrap(visits),
   };
 
   /**
@@ -75,7 +78,7 @@ const Store = (() => {
 
   /** 清空全部数据（设置页「清空全部数据」用） */
   async function clearAll() {
-    await Promise.all([beans.clear(), entries.clear(), preparations.clear(), mills.clear()]);
+    await Promise.all([beans.clear(), entries.clear(), preparations.clear(), mills.clear(), visits.clear()]);
   }
 
   return { ...api, seed, adjustBeanWeight, clearAll };

@@ -146,24 +146,33 @@ const Views = (() => {
 
   /* ================= 1. 首页 · 手账时间线 ================= */
   async function timeline() {
-    const [entries, beans, preps] = await Promise.all([
-      Store.entries.getAll(), Store.beans.getAll(), Store.preparations.getAll(),
+    const [entries, beans, preps, visits] = await Promise.all([
+      Store.entries.getAll(), Store.beans.getAll(), Store.preparations.getAll(), Store.visits.getAll(),
     ]);
     const beanMap = Object.fromEntries(beans.map((b) => [b.id, b]));
     const prepMap = Object.fromEntries(preps.map((p) => [p.id, p]));
-    // 按日期倒序，同日按创建时间倒序
-    entries.sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt - a.createdAt));
+
+    // 合并时间线：冲煮记录 + 探店记录，按日期倒序、同日按创建时间倒序
+    const items = [
+      ...entries.map((e) => ({ kind: 'brew', date: e.date, createdAt: e.createdAt, data: e })),
+      ...visits.map((v) => ({ kind: 'visit', date: v.date, createdAt: v.createdAt, data: v })),
+    ].sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt - a.createdAt));
 
     view().innerHTML = `
       <section class="page">
         ${heatmapHtml(entries)}
-        <a class="btn-hero" href="#/entry/new" style="text-decoration:none;text-align:center;">☕ 今日冲一杯</a>
-        ${entries.length ? entries.map((e) => entryCard(e, beanMap, prepMap)).join('') : emptyHtml('还没有记录，冲第一杯吧 ☕')}
+        <div class="hero-row">
+          <a class="btn-hero" href="#/entry/new" style="text-decoration:none;text-align:center;">☕ 今日冲一杯</a>
+          <a class="btn-hero btn-hero-visit" href="#/visit/new" style="text-decoration:none;text-align:center;">🏪 探店打卡</a>
+        </div>
+        ${items.length ? items.map((it) => it.kind === 'brew' ? entryCard(it.data, beanMap, prepMap) : visitCard(it.data)).join('') : emptyHtml('还没有记录，冲第一杯吧 ☕')}
       </section>`;
 
-    // 点击卡片进入编辑
+    // 点击卡片进入编辑（冲煮 / 探店分别跳转）
     $$('.entry-card').forEach((card) => {
-      card.addEventListener('click', () => { location.hash = '#/entry/edit/' + card.dataset.id; });
+      card.addEventListener('click', () => {
+        location.hash = (card.dataset.kind === 'visit' ? '#/visit/edit/' : '#/entry/edit/') + card.dataset.id;
+      });
     });
   }
 
@@ -193,7 +202,7 @@ const Views = (() => {
     const p = prepMap[e.preparationId];
     const notes = (e.tasting?.notes || '').trim();
     return `
-      <article class="card entry-card" data-id="${e.id}">
+      <article class="card entry-card" data-kind="brew" data-id="${e.id}">
         <div class="ec-head">
           <span class="ec-date">${esc(prettyDate(e.date))}</span>
           <span class="ec-mood">${esc(e.mood || '')}</span>
@@ -202,6 +211,31 @@ const Views = (() => {
         <div class="ec-meta">${esc(p ? p.name : '—')} · 粉水比 ${ratioText(e)} · 粉 ${num(e.brew?.dose) || '-'}g</div>
         <div class="ec-foot">
           <span class="ec-score">★ ${e.tasting?.score ?? '—'}</span>
+          ${notes ? `<span class="ec-notes">${esc(notes)}</span>` : ''}
+        </div>
+      </article>`;
+  }
+
+  /** 探店卡片：店名 + 品种胶囊 + 评分/价格 */
+  function visitCard(v) {
+    const notes = (v.notes || '').trim();
+    return `
+      <article class="card entry-card" data-kind="visit" data-id="${v.id}">
+        <div class="ec-head">
+          <span class="ec-date">${esc(prettyDate(v.date))}</span>
+          <span class="ec-mood">${esc(v.mood || '')}</span>
+        </div>
+        <div class="ec-main-row">
+          ${v.photo ? `<img class="vc-photo" src="${v.photo}" alt="">` : ''}
+          <div class="ec-main">
+            <div class="ec-bean">🏪 ${esc(v.shopName)}</div>
+            <div class="ec-meta">
+              <span class="pill pill-visit">${esc(v.drinkType || '其他')}</span>${esc(v.drinkName || '')}${v.price != null ? ` · ¥${v.price}` : ''}
+            </div>
+          </div>
+        </div>
+        <div class="ec-foot">
+          <span class="ec-score">★ ${v.rating ?? '—'}</span>
           ${notes ? `<span class="ec-notes">${esc(notes)}</span>` : ''}
         </div>
       </article>`;
@@ -1101,6 +1135,174 @@ const Views = (() => {
     }
   }
 
+  /* ================= 4b. 探店记录表单 ================= */
+  // 出品品种：四大类；奶咖内置常见品类，datalist 之外可直接输入自定义品种
+  const DRINK_TYPES = ['黑咖', '奶咖', '特调', '其他'];
+  const DRINK_SUGGESTIONS = {
+    '黑咖': ['美式', '手冲单品', '冷萃', '浓缩', 'Long Black', '滴滤咖啡'],
+    '奶咖': ['拿铁', '卡布奇诺', 'Flat White', '澳白', 'Dirty', '燕麦拿铁', '摩卡', '焦糖玛奇朵', '短笛'],
+    '特调': ['特调', '气泡美式', '橙C美式', '生椰拿铁', '阿芙佳朵', '柠檬冷萃'],
+    '其他': ['无咖啡因', '抹茶拿铁', '热巧克力', '康宝蓝'],
+  };
+
+  async function visitForm(id) {
+    const editing = id ? await Store.visits.get(id) : null;
+    let photo = editing?.photo || null;      // 压缩后的 base64 照片（饮品/菜单/店面）
+    let drinkType = editing?.drinkType || '奶咖';
+    let mood = editing?.mood || '😀';
+
+    view().innerHTML = `
+      <section class="page">
+        <h2 class="page-title">${editing ? '编辑探店记录' : '🏪 探店打卡'}</h2>
+
+        <button type="button" class="btn-photo" id="btn-photo">📷 拍照识别出品 / 菜单</button>
+        <input type="file" id="file-photo" accept="image/*" capture="environment" hidden>
+        <div id="recog-status"></div>
+        <div id="photo-preview">${photo ? `<img src="${photo}" alt="探店照片">` : ''}</div>
+
+        <form id="visit-form" class="form card" novalidate>
+          <div class="f-row">
+            <label class="f-label">日期<input name="date" type="date" value="${esc(editing?.date || todayStr())}"></label>
+            <label class="f-label">价格 ¥<input name="price" type="number" inputmode="decimal" min="0" value="${editing?.price ?? ''}"></label>
+          </div>
+          <label class="f-label">店名 *<input name="shopName" required value="${esc(editing?.shopName || '')}" placeholder="如 % Arabica"></label>
+          <label class="f-label">地址 / 城市<input name="location" value="${esc(editing?.location || '')}"></label>
+          <div class="f-label">出品品种</div>
+          <div class="drink-pills" id="drink-pills">
+            ${DRINK_TYPES.map((t) => `<button type="button" class="drink-pill ${t === drinkType ? 'sel' : ''}" data-t="${t}">${t}</button>`).join('')}
+          </div>
+          <label class="f-label">具体饮品（可选择，也可直接输入自定义品种）
+            <input name="drinkName" list="drink-list" value="${esc(editing?.drinkName || '')}" placeholder="如 Dirty / 燕麦拿铁 / 店家特调">
+            <datalist id="drink-list"></datalist>
+          </label>
+          <div class="slider-row">
+            <div class="sl-head"><span>评分</span><span class="sl-val" id="sv-rating">${editing?.rating ?? 7}</span></div>
+            <input type="range" min="0" max="10" step="0.5" value="${editing?.rating ?? 7}" name="rating">
+          </div>
+          <div class="f-label" style="margin:2px 0 4px;">心情</div>
+          <div class="mood-row" id="mood-row">
+            ${MOODS.map((m) => `<button type="button" class="${mood === m ? 'sel' : ''}" data-m="${m}">${m}</button>`).join('')}
+          </div>
+          <label class="f-label">笔记
+            <textarea name="notes" placeholder="环境、出品、豆子风味…">${esc(editing?.notes || '')}</textarea>
+          </label>
+          <button type="submit" class="btn btn-primary btn-block" style="padding:14px;font-size:16px;">保存</button>
+          ${editing ? '<button type="button" class="btn btn-danger btn-block" id="btn-del">删除这条记录</button>' : ''}
+        </form>
+      </section>`;
+
+    const form = $('#visit-form');
+
+    // 品种联想随 drinkType 切换；自定义品种直接输入即可（datalist 不限制输入）
+    const updateSuggestions = () => {
+      $('#drink-list').innerHTML = (DRINK_SUGGESTIONS[drinkType] || []).map((d) => `<option value="${esc(d)}">`).join('');
+    };
+    updateSuggestions();
+    $('#drink-pills').addEventListener('click', (e) => {
+      const pill = e.target.closest('.drink-pill');
+      if (!pill) return;
+      drinkType = pill.dataset.t;
+      $$('.drink-pill').forEach((x) => x.classList.toggle('sel', x === pill));
+      updateSuggestions();
+    });
+
+    // 评分滑块实时数值
+    form.elements.rating.addEventListener('input', (e) => { $('#sv-rating').textContent = e.target.value; });
+
+    // 心情选择
+    $('#mood-row').addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-m]');
+      if (!btn) return;
+      mood = btn.dataset.m;
+      $$('#mood-row button').forEach((x) => x.classList.toggle('sel', x === btn));
+    });
+
+    /* ---- 拍照识别出品 / 菜单 ---- */
+    const status = $('#recog-status');
+    $('#btn-photo').addEventListener('click', () => $('#file-photo').click());
+    $('#file-photo').addEventListener('change', async (ev) => {
+      const file = ev.target.files[0];
+      ev.target.value = '';
+      if (!file) return;
+      try {
+        status.innerHTML = `<div class="recog-loading">正在压缩照片</div>`;
+        photo = await ImageUtil.compress(file);
+        $('#photo-preview').innerHTML = `<img src="${photo}" alt="探店照片">`;
+        await runRecognize();
+      } catch (err) { showRecogError(err); }
+    });
+
+    async function runRecognize() {
+      try {
+        status.innerHTML = `<div class="recog-loading">🔍 大模型识别中</div>`;
+        const info = await LLM.recognizeVisit(photo);
+        fillForm(info); // 仅回填表单，品种细节由用户确认/修改后再保存
+        status.innerHTML = `<div class="recog-ok">✅ 识别完成，请核对品种细节后再保存</div>`;
+      } catch (err) { showRecogError(err); }
+    }
+
+    function showRecogError(err) {
+      status.innerHTML = `<div class="recog-error">❌ ${esc(err.message || '识别失败')}
+        <button type="button" class="btn btn-mini" id="btn-retry" style="margin-left:8px;">重试</button></div>`;
+      $('#btn-retry')?.addEventListener('click', () => { if (photo) runRecognize(); });
+    }
+
+    /** 识别结果回填：仅覆盖非空字段；drinkType 归一化到四大类 */
+    function fillForm(info) {
+      const setVal = (name, v) => { if (v != null && v !== '') form.elements[name].value = v; };
+      setVal('shopName', info.shopName);
+      setVal('location', info.location);
+      setVal('drinkName', info.drinkName);
+      setVal('notes', info.notes);
+      if (info.price != null && info.price !== '') form.elements.price.value = num(info.price);
+      if (info.drinkType) {
+        const hit = DRINK_TYPES.find((t) => String(info.drinkType).includes(t));
+        if (hit) {
+          drinkType = hit;
+          $$('.drink-pill').forEach((x) => x.classList.toggle('sel', x.dataset.t === hit));
+          updateSuggestions();
+        }
+      }
+    }
+
+    /* ---- 保存 ---- */
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const shopName = form.elements.shopName.value.trim();
+      if (!shopName) { toast('请填写店名'); return; }
+      const orNull = (v) => (v && String(v).trim() !== '' ? String(v).trim() : null);
+      const visit = {
+        id: editing?.id || 'v_' + Date.now(),
+        date: form.elements.date.value || todayStr(),
+        shopName,
+        location: orNull(form.elements.location.value),
+        drinkType,
+        drinkName: orNull(form.elements.drinkName.value),
+        price: form.elements.price.value !== '' ? num(form.elements.price.value) : null,
+        rating: num(form.elements.rating.value, 7),
+        notes: form.elements.notes.value || '',
+        photo,
+        mood,
+        createdAt: editing?.createdAt || Date.now(),
+      };
+      try {
+        await Store.visits.put(visit);
+        toast('已记录一次探店 🏪');
+        location.hash = '#/';
+      } catch (err) {
+        console.error('保存失败', err);
+        toast('保存失败：' + (err.message || err), 4000);
+      }
+    });
+
+    $('#btn-del')?.addEventListener('click', async () => {
+      if (!(await confirmDlg('确定删除这条探店记录吗？', { danger: true, okText: '删除' }))) return;
+      await Store.visits.remove(editing.id);
+      toast('已删除');
+      location.hash = '#/';
+    });
+  }
+
   /* ================= 5b. 世界产地地图 ================= */
   let mapState = null; // { groups, bubbles, sel }：聚合结果 / 气泡位置（点击命中用）/ 选中国家
 
@@ -1432,13 +1634,14 @@ const Views = (() => {
       }
     });
 
-    // 数据导出：四个 store 打包成 JSON 下载，文件名含日期
+    // 数据导出：五个 store 打包成 JSON 下载，文件名含日期
     $('#btn-export').addEventListener('click', async () => {
       const data = {
         beans: await Store.beans.getAll(),
         entries: await Store.entries.getAll(),
         preparations: await Store.preparations.getAll(),
         mills: await Store.mills.getAll(),
+        visits: await Store.visits.getAll(),
         exportedAt: new Date().toISOString(),
       };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1458,13 +1661,16 @@ const Views = (() => {
       if (!file) return;
       try {
         const data = JSON.parse(await file.text());
-        for (const k of ['beans', 'entries', 'preparations', 'mills']) {
-          if (!Array.isArray(data[k])) throw new Error('文件格式不正确：缺少 ' + k);
+        // visits 为后加的 store，旧版导出文件可能没有，缺省为空数组
+        const KEYS = ['beans', 'entries', 'preparations', 'mills', 'visits'];
+        for (const k of KEYS) {
+          if (data[k] == null) data[k] = [];
+          if (!Array.isArray(data[k])) throw new Error('文件格式不正确：' + k + ' 应为数组');
         }
-        const n = data.beans.length + data.entries.length + data.preparations.length + data.mills.length;
+        const n = KEYS.reduce((s, k) => s + data[k].length, 0);
         if (!(await confirmDlg(`将清空现有数据并导入 ${n} 条记录，确定继续吗？`, { okText: '导入' }))) return;
         await Store.clearAll();
-        for (const k of ['beans', 'entries', 'preparations', 'mills']) {
+        for (const k of KEYS) {
           for (const item of data[k]) await Store[k].put(item);
         }
         toast('导入完成 ✅');
@@ -1498,6 +1704,7 @@ const Views = (() => {
       case 'library':  return library(b || 'beans');
       case 'bean':     return beanForm(b === 'edit' ? c : null);
       case 'entry':    return entryForm(b === 'edit' ? c : null);
+      case 'visit':    return visitForm(b === 'edit' ? c : null);
       case 'stats':    return stats();
       case 'map':      return mapView();
       case 'settings': return settingsPage();

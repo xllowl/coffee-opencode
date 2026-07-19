@@ -48,6 +48,18 @@ const LLM = (() => {
 }
 规则：英文标签请翻译成中文；无法确定的字段填 null；roastLevel 和 process 必须归一化到给定枚举。`;
 
+  // 探店识别用 Prompt：识别菜单 / 出品卡 / 杯贴
+  const VISIT_PROMPT = `你是专业咖啡师。识别图片（咖啡馆菜单/价目表/出品卡/咖啡杯贴），仅输出 JSON（不要 markdown 代码块）：
+{
+  "shopName": "咖啡馆名称",
+  "location": "地址/城市",
+  "drinkName": "饮品名称（翻译为中文，可附原文）",
+  "drinkType": "黑咖|奶咖|特调|其他",
+  "price": 数字（单价，无法确定填 null）,
+  "notes": "杯量/温度/豆子/做法等补充信息"
+}
+规则：无法确定的字段填 null；drinkType 必须归一化到给定枚举；含牛奶或植物奶的饮品（拿铁/卡布奇诺/Dirty/Flat White/澳白/摩卡/燕麦拿铁等）必须归类为奶咖；菜单上有多个饮品时选最招牌或最清晰的一个。`;
+
   /** 读取设置（localStorage 键：coffee_settings） */
   function getSettings() {
     let s = {};
@@ -74,17 +86,27 @@ const LLM = (() => {
    * @returns {Promise<object>} 解析出的豆子信息 JSON
    */
   async function recognize(dataUrl) {
+    return recognizeWithPrompt(dataUrl, PROMPT);
+  }
+
+  /** 探店识别：菜单 / 出品卡 / 杯贴 */
+  async function recognizeVisit(dataUrl) {
+    return recognizeWithPrompt(dataUrl, VISIT_PROMPT);
+  }
+
+  /** 通用识别入口：同一套调用链，仅 Prompt 不同 */
+  async function recognizeWithPrompt(dataUrl, prompt) {
     const s = getSettings();
     if (!s.apiKey) throw new Error('未配置 API Key，请先到「设置」页填写');
     const p = PROVIDERS[s.provider];
     const text = p.type === 'gemini'
-      ? await callGemini(s, dataUrl)
-      : await callOpenAICompat(s, dataUrl);
+      ? await callGemini(s, dataUrl, prompt)
+      : await callOpenAICompat(s, dataUrl, prompt);
     return parseJsonLoose(text);
   }
 
   /** OpenAI 兼容格式（智谱 / 通义 / OpenAI 通用） */
-  async function callOpenAICompat(s, dataUrl) {
+  async function callOpenAICompat(s, dataUrl, prompt) {
     const p = PROVIDERS[s.provider];
     const res = await fetch(p.url, {
       method: 'POST',
@@ -98,7 +120,7 @@ const LLM = (() => {
         messages: [{
           role: 'user',
           content: [
-            { type: 'text', text: PROMPT },
+            { type: 'text', text: prompt },
             { type: 'image_url', image_url: { url: dataUrl } },
           ],
         }],
@@ -110,7 +132,7 @@ const LLM = (() => {
   }
 
   /** Gemini 原生格式 */
-  async function callGemini(s, dataUrl) {
+  async function callGemini(s, dataUrl, prompt) {
     const p = PROVIDERS[s.provider];
     const url = p.url.replace('{model}', effectiveModel(s)) + '?key=' + encodeURIComponent(s.apiKey);
     const base64 = dataUrl.split(',')[1] || ''; // 去掉 data:image/jpeg;base64, 前缀
@@ -120,7 +142,7 @@ const LLM = (() => {
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: PROMPT },
+            { text: prompt },
             { inlineData: { mimeType: 'image/jpeg', data: base64 } },
           ],
         }],
@@ -186,5 +208,5 @@ const LLM = (() => {
     return j.choices?.[0]?.message?.content || 'OK';
   }
 
-  return { PROVIDERS, PROMPT, getSettings, saveSettings, recognize, testConnection };
+  return { PROVIDERS, PROMPT, VISIT_PROMPT, getSettings, saveSettings, recognize, recognizeVisit, testConnection };
 })();
