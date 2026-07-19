@@ -40,6 +40,15 @@
     // PWA：注册 Service Worker，失败时静默降级（不影响任何功能）
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(() => { /* 静默降级 */ });
+      // 若页面此前由旧版 SW 控制，新版接管后自动刷新一次，避免一直跑旧缓存代码
+      if (navigator.serviceWorker.controller) {
+        let reloaded = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (reloaded) return;
+          reloaded = true;
+          location.reload();
+        });
+      }
     }
 
     if (!location.hash) location.hash = '#/';
