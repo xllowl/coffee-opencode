@@ -1,0 +1,14 @@
+{
+  "name": "咖啡手账",
+  "short_name": "咖啡手账",
+  "description": "记录每天的咖啡冲煮、咖啡豆档案和品鉴笔记",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f0e8",
+  "theme_color": "#3e2f25",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
