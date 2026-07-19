@@ -44,13 +44,22 @@ const Store = (() => {
     }
   }
 
+  // 包装后的公开 API（get/put/remove 等方法）
+  const api = {
+    beans: wrap(beans),
+    entries: wrap(entries),
+    preparations: wrap(preparations),
+    mills: wrap(mills),
+  };
+
   /**
    * 调整豆子剩余克数（核心业务规则 1/2/3 的底层实现）
    * @param {string} beanId
    * @param {number} delta 负数=扣减（冲了一杯），正数=回补（删除/编辑记录）
    */
   async function adjustBeanWeight(beanId, delta) {
-    const b = await beans.get(beanId);
+    // 注意：必须走包装层 api.beans（localForage 原始实例只有 getItem，没有 get）
+    const b = await api.beans.get(beanId);
     if (!b) return;
     b.remainingWeight = Math.round((Number(b.remainingWeight || 0) + delta) * 10) / 10;
     if (b.remainingWeight <= 0) {
@@ -61,7 +70,7 @@ const Store = (() => {
       // 回补后大于 0：恢复 active
       b.status = 'active';
     }
-    await beans.put(b);
+    await api.beans.put(b);
   }
 
   /** 清空全部数据（设置页「清空全部数据」用） */
@@ -69,13 +78,5 @@ const Store = (() => {
     await Promise.all([beans.clear(), entries.clear(), preparations.clear(), mills.clear()]);
   }
 
-  return {
-    beans: wrap(beans),
-    entries: wrap(entries),
-    preparations: wrap(preparations),
-    mills: wrap(mills),
-    seed,
-    adjustBeanWeight,
-    clearAll,
-  };
+  return { ...api, seed, adjustBeanWeight, clearAll };
 })();

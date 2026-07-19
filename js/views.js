@@ -122,6 +122,26 @@ const Views = (() => {
     timers = [];
   }
 
+  /**
+   * Chart.js 安全创建：CDN 加载失败或初始化出错时返回 null 并给出占位提示，
+   * 绝不让图表问题阻断表单等核心功能
+   */
+  function safeChart(canvas, config) {
+    if (typeof Chart === 'undefined' || !canvas) {
+      canvas?.closest('.radar-wrap, .chart-box')?.insertAdjacentHTML(
+        'beforeend', '<div style="text-align:center;color:var(--muted);font-size:13px;padding:40px 0;">图表组件未加载，不影响记录功能</div>');
+      return null;
+    }
+    try {
+      const c = new Chart(canvas, config);
+      charts.push(c);
+      return c;
+    } catch (err) {
+      console.warn('图表初始化失败', err);
+      return null;
+    }
+  }
+
   /* ================= 1. 首页 · 手账时间线 ================= */
   async function timeline() {
     const [entries, beans, preps] = await Promise.all([
@@ -602,10 +622,7 @@ const Views = (() => {
           ? '<button class="btn btn-danger btn-block" id="wiz-del" style="margin-top:10px;">删除这条记录</button>' : ''}
       </section>`;
 
-    if (wizStep === 1) renderStep1();
-    else if (wizStep === 2) renderStep2();
-    else renderStep3();
-
+    // 先绑定底部按钮，再渲染步骤内容：即使步骤内容渲染出错，保存/导航按钮依然可用
     $('#wiz-back')?.addEventListener('click', () => { wizStep--; renderWiz(); });
     $('#wiz-next')?.addEventListener('click', () => {
       if (wizStep === 1 && !wiz.beanId) { toast('先选一支豆子'); return; }
@@ -617,6 +634,15 @@ const Views = (() => {
     });
     $('#wiz-save')?.addEventListener('click', saveEntry);
     $('#wiz-del')?.addEventListener('click', deleteEntry);
+
+    try {
+      if (wizStep === 1) renderStep1();
+      else if (wizStep === 2) renderStep2();
+      else renderStep3();
+    } catch (err) {
+      console.error('向导渲染失败', err);
+      $('#wiz-body').innerHTML = `<div class="recog-error">⚠️ 页面渲染出错：${esc(err.message)}<br>仍可尝试点击底部按钮。</div>`;
+    }
   }
 
   /* ---- 第一步：选豆子 ---- */
@@ -990,9 +1016,9 @@ const Views = (() => {
         </label>
       </div>`;
 
-    // 五维雷达图预览（拖动滑块实时更新）
+    // 五维雷达图预览（拖动滑块实时更新）；图表失败不影响表单
     const dims = ['acidity', 'sweetness', 'bitterness', 'body', 'aroma'];
-    const radar = new Chart($('#taste-radar'), {
+    const radar = safeChart($('#taste-radar'), {
       type: 'radar',
       data: {
         labels: ['酸质', '甜感', '苦度', '醇厚度', '香气'],
@@ -1011,7 +1037,6 @@ const Views = (() => {
         scales: { r: { min: 0, max: 5, ticks: { display: false, stepSize: 1 }, grid: { color: '#e6dbc9' }, angleLines: { color: '#e6dbc9' } } },
       },
     });
-    charts.push(radar);
 
     // 滑块输入 → 写回 + 数值气泡 + 雷达图联动
     $$('#wiz-body [data-taste]').forEach((inp) => {
@@ -1020,7 +1045,7 @@ const Views = (() => {
         t[k] = num(inp.value);
         $('#sv-' + k).textContent = t[k];
         const di = dims.indexOf(k);
-        if (di >= 0) { radar.data.datasets[0].data[di] = t[k]; radar.update('none'); }
+        if (radar && di >= 0) { radar.data.datasets[0].data[di] = t[k]; radar.update('none'); }
       });
     });
 
@@ -1035,32 +1060,43 @@ const Views = (() => {
 
   /* ---- 保存 / 删除记录（核心业务规则 1/2/3） ---- */
   async function saveEntry() {
-    const e = JSON.parse(JSON.stringify(wiz));
-    // espresso：water 字段同步为液重，保证粉水比语义统一
-    if (curPrep()?.type === 'espresso') e.brew.water = num(e.brew.yield);
-    if (wizOriginal) {
-      // 规则 3：编辑 —— 先按旧 dose 回补，再按新 dose 扣减
-      await Store.adjustBeanWeight(wizOriginal.beanId, +num(wizOriginal.brew.dose));
-      e.id = wizOriginal.id;
-      e.createdAt = wizOriginal.createdAt;
-    } else {
-      e.id = 'e_' + Date.now();
-      e.createdAt = Date.now();
+    try {
+      const e = JSON.parse(JSON.stringify(wiz));
+      // espresso：water 字段同步为液重，保证粉水比语义统一
+      if (curPrep()?.type === 'espresso') e.brew.water = num(e.brew.yield);
+      if (wizOriginal) {
+        // 规则 3：编辑 —— 先按旧 dose 回补，再按新 dose 扣减
+        await Store.adjustBeanWeight(wizOriginal.beanId, +num(wizOriginal.brew.dose));
+        e.id = wizOriginal.id;
+        e.createdAt = wizOriginal.createdAt;
+      } else {
+        e.id = 'e_' + Date.now();
+        e.createdAt = Date.now();
+      }
+      // 规则 1：保存 —— 扣减豆量；remainingWeight<=0 自动转 finished（在 adjustBeanWeight 内完成）
+      await Store.adjustBeanWeight(e.beanId, -num(e.brew.dose));
+      await Store.entries.put(e);
+      toast('已记录一杯 ☕');
+      location.hash = '#/';
+    } catch (err) {
+      // 失败时给出具体原因（如 IndexedDB 不可用/存储超限），不再静默
+      console.error('保存失败', err);
+      toast('保存失败：' + (err.message || err), 4000);
     }
-    // 规则 1：保存 —— 扣减豆量；remainingWeight<=0 自动转 finished（在 adjustBeanWeight 内完成）
-    await Store.adjustBeanWeight(e.beanId, -num(e.brew.dose));
-    await Store.entries.put(e);
-    toast('已记录一杯 ☕');
-    location.hash = '#/';
   }
 
   async function deleteEntry() {
     if (!(await confirmDlg('确定删除这条冲煮记录吗？豆量会自动回补。', { danger: true, okText: '删除' }))) return;
-    // 规则 2：删除 —— 回补 dose；原为 finished 且回补后 >0 自动恢复 active
-    await Store.adjustBeanWeight(wizOriginal.beanId, +num(wizOriginal.brew.dose));
-    await Store.entries.remove(wizOriginal.id);
-    toast('已删除，豆量已回补');
-    location.hash = '#/';
+    try {
+      // 规则 2：删除 —— 回补 dose；原为 finished 且回补后 >0 自动恢复 active
+      await Store.adjustBeanWeight(wizOriginal.beanId, +num(wizOriginal.brew.dose));
+      await Store.entries.remove(wizOriginal.id);
+      toast('已删除，豆量已回补');
+      location.hash = '#/';
+    } catch (err) {
+      console.error('删除失败', err);
+      toast('删除失败：' + (err.message || err), 4000);
+    }
   }
 
   /* ================= 5. 统计页 ================= */
@@ -1127,36 +1163,36 @@ const Views = (() => {
     const baseOpts = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } };
 
     // 雷达图：五维平均分
-    charts.push(new Chart($('#c-radar'), {
+    safeChart($('#c-radar'), {
       type: 'radar',
       data: { labels: ['酸质', '甜感', '苦度', '醇厚度', '香气'],
         datasets: [{ data: avg, fill: true, backgroundColor: 'rgba(192,133,82,.25)', borderColor: ACCENT, pointBackgroundColor: COFFEE }] },
       options: { ...baseOpts, scales: { r: { min: 0, max: 5, ticks: { display: false }, grid: { color: '#e6dbc9' }, angleLines: { color: '#e6dbc9' } } } },
-    }));
+    });
 
     // 横向条形图：豆子杯数排行
-    charts.push(new Chart($('#c-bar'), {
+    safeChart($('#c-bar'), {
       type: 'bar',
       data: { labels: top.map(([id]) => (beanMap[id]?.name || '已删除').slice(0, 10)),
         datasets: [{ data: top.map(([, c]) => c), backgroundColor: PALETTE, borderRadius: 6 }] },
       options: { ...baseOpts, indexAxis: 'y', scales: { x: { ticks: { stepSize: 1 }, grid: { color: '#eee4d4' } }, y: { grid: { display: false } } } },
-    }));
+    });
 
     // 折线图：评分趋势
-    charts.push(new Chart($('#c-line'), {
+    safeChart($('#c-line'), {
       type: 'line',
       data: { labels: days.map((k) => k.slice(5)),
         datasets: [{ data: dayAvg, borderColor: COFFEE, backgroundColor: 'rgba(111,78,55,.12)', fill: true, tension: .35, pointRadius: 3, pointBackgroundColor: ACCENT }] },
       options: { ...baseOpts, scales: { y: { min: 0, max: 10, grid: { color: '#eee4d4' } }, x: { grid: { display: false } } } },
-    }));
+    });
 
     // 环形图：器具类型分布
-    charts.push(new Chart($('#c-pie'), {
+    safeChart($('#c-pie'), {
       type: 'doughnut',
       data: { labels: Object.keys(perType).map((t) => TYPE_LABEL[t] || t),
         datasets: [{ data: Object.values(perType), backgroundColor: PALETTE, borderColor: '#fffdf8', borderWidth: 2 }] },
       options: { ...baseOpts, plugins: { legend: { position: 'right' } } },
-    }));
+    });
   }
 
   /* ================= 6. 设置页 ================= */
