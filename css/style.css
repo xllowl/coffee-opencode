@@ -32,6 +32,37 @@ body {
   padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 12px);
 }
 
+/* ---------------- FontAwesome 图标规范 ---------------- */
+/* 矢量 WebFont，天然支持高 DPI 缩放；
+   常规文本旁的图标 = 当前字号 90%，标题旁的图标 = 当前字号 110% */
+i[class*="fa-"] {
+  font-size: .9em;
+  line-height: 1;
+  vertical-align: -0.04em;
+}
+h1 i[class*="fa-"], h2 i[class*="fa-"], h3 i[class*="fa-"],
+.page-title i[class*="fa-"], .modal-title i[class*="fa-"] {
+  font-size: 1.1em;
+}
+/* 功能型图标（按钮/链接内）：200ms 缓动 hover 过渡 */
+a i[class*="fa-"], button i[class*="fa-"] {
+  opacity: .85;
+  transition: opacity .2s ease, transform .2s ease, filter .2s ease;
+}
+a:hover i[class*="fa-"], button:hover i[class*="fa-"] {
+  opacity: 1;
+  transform: scale(1.05);                 /* 悬停放大 5% */
+  filter: drop-shadow(0 1px 2px rgba(62, 47, 37, .35)); /* 微弱阴影增强层次 */
+}
+/* FA 加载失败降级：隐藏未被替换的残余图标，避免布局错乱 */
+body.fa-failed i[class*="fa-"] { display: none !important; }
+/* 场景化尺寸 */
+.tabbar a > i[class*="fa-"] { font-size: 17px; vertical-align: 0; }
+.tab-add i[class*="fa-"] { font-size: 22px; }
+.topbar-map i[class*="fa-"] { font-size: 20px; color: #f3ead9; }
+.empty .emo i[class*="fa-"] { font-size: 40px; color: var(--accent); }
+.bc-no-photo i[class*="fa-"] { font-size: 24px; color: var(--accent); }
+
 /* ---------------- 顶栏 ---------------- */
 .topbar {
   position: sticky; top: 0; z-index: 30;
@@ -140,7 +171,6 @@ body {
   gap: 2px; text-decoration: none; color: var(--muted); font-size: 12px;
 }
 .tabbar a.active { color: var(--coffee); font-weight: 700; }
-.tab-ico { font-size: 18px; }
 /* 居中放大的 ＋ 圆形按钮 */
 .tab-add { position: relative; }
 .tab-add span {

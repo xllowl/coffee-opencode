@@ -20,7 +20,25 @@ const Views = (() => {
   const MILL_TYPE_LABEL = { hand: '手摇', electric: '电动' };
   const ROASTS = ['浅烘', '中浅烘', '中烘', '中深烘', '深烘'];
   const PROCESSES = ['水洗', '日晒', '蜜处理', '厌氧日晒', '酒桶发酵', '湿刨', '其他'];
-  const MOODS = ['😍', '😀', '🙂', '😐', '😞', '🥱', '😴', '🤒'];
+  // 心情体系：FA 免费 solid 表情图标；emo 字段用于 CDN 失败降级 + 兼容旧数据中的 emoji
+  const MOODS = [
+    { k: 'love',   ico: 'fa-face-grin-hearts', emo: '😍' },
+    { k: 'happy',  ico: 'fa-face-laugh',       emo: '😀' },
+    { k: 'smile',  ico: 'fa-face-smile',       emo: '🙂' },
+    { k: 'meh',    ico: 'fa-face-meh',         emo: '😐' },
+    { k: 'sad',    ico: 'fa-face-frown',       emo: '😞' },
+    { k: 'tired',  ico: 'fa-face-tired',       emo: '🥱' },
+    { k: 'sleepy', ico: 'fa-face-sleeping',    emo: '😴' },
+    { k: 'sick',   ico: 'fa-face-thermometer', emo: '🤒' },
+  ];
+  // 心情值（新=key / 旧=emoji）→ FA 类名 / 兜底 emoji
+  const moodFind = (m) => MOODS.find((x) => x.k === m) || MOODS.find((x) => x.emo === m) || null;
+  const moodIconHtml = (m) => {
+    const f = moodFind(m);
+    return f ? `<i class="fa-solid ${f.ico}" data-emo="${f.emo}"></i>` : '';
+  };
+  const moodBtnHtml = (cur) => MOODS.map((x) =>
+    `<button type="button" class="${cur === x.k || cur === x.emo ? 'sel' : ''}" data-m="${x.k}"><i class="fa-solid ${x.ico}" data-emo="${x.emo}"></i></button>`).join('');
   const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
 
   const prettyDate = (ds) => {
@@ -162,10 +180,10 @@ const Views = (() => {
       <section class="page">
         ${heatmapHtml(entries)}
         <div class="hero-row">
-          <a class="btn-hero" href="#/entry/new" style="text-decoration:none;text-align:center;">☕ 今日冲一杯</a>
-          <a class="btn-hero btn-hero-visit" href="#/visit/new" style="text-decoration:none;text-align:center;">🏪 探店打卡</a>
+          <a class="btn-hero" href="#/entry/new" style="text-decoration:none;text-align:center;"><i class="fa-solid fa-mug-hot" data-emo="☕"></i> 今日冲一杯</a>
+          <a class="btn-hero btn-hero-visit" href="#/visit/new" style="text-decoration:none;text-align:center;"><i class="fa-solid fa-store" data-emo="🏪"></i> 探店打卡</a>
         </div>
-        ${items.length ? items.map((it) => it.kind === 'brew' ? entryCard(it.data, beanMap, prepMap) : visitCard(it.data)).join('') : emptyHtml('还没有记录，冲第一杯吧 ☕')}
+        ${items.length ? items.map((it) => it.kind === 'brew' ? entryCard(it.data, beanMap, prepMap) : visitCard(it.data)).join('') : emptyHtml('还没有记录，冲第一杯吧', 'fa-mug-hot', '☕')}
       </section>`;
 
     // 点击卡片进入编辑（冲煮 / 探店分别跳转）
@@ -176,8 +194,9 @@ const Views = (() => {
     });
   }
 
-  function emptyHtml(text) {
-    return `<div class="empty"><span class="emo">📔</span>${esc(text)}</div>`;
+  /** 空状态：大号装饰图标 + 文案 */
+  function emptyHtml(text, ico = 'fa-book-open', emo = '📔') {
+    return `<div class="empty"><span class="emo"><i class="fa-solid ${ico}" data-emo="${emo}"></i></span>${esc(text)}</div>`;
   }
 
   /** 近 12 周冲煮日历热力图（纯 CSS grid，7 行 × 12 列，列=周） */
@@ -205,7 +224,7 @@ const Views = (() => {
       <article class="card entry-card" data-kind="brew" data-id="${e.id}">
         <div class="ec-head">
           <span class="ec-date">${esc(prettyDate(e.date))}</span>
-          <span class="ec-mood">${esc(e.mood || '')}</span>
+          <span class="ec-mood">${moodIconHtml(e.mood)}</span>
         </div>
         <div class="ec-bean">${esc(b ? b.name : '（豆子已删除）')}</div>
         <div class="ec-meta">${esc(p ? p.name : '—')} · 粉水比 ${ratioText(e)} · 粉 ${num(e.brew?.dose) || '-'}g</div>
@@ -230,12 +249,12 @@ const Views = (() => {
       <article class="card entry-card" data-kind="visit" data-id="${v.id}">
         <div class="ec-head">
           <span class="ec-date">${esc(prettyDate(v.date))}</span>
-          <span class="ec-mood">${esc(v.mood || '')}</span>
+          <span class="ec-mood">${moodIconHtml(v.mood)}</span>
         </div>
         <div class="ec-main-row">
           ${v.photo ? `<img class="vc-photo" src="${v.photo}" alt="">` : ''}
           <div class="ec-main">
-            <div class="ec-bean">🏪 ${esc(v.shopName)}</div>
+            <div class="ec-bean"><i class="fa-solid fa-store" data-emo="🏪"></i> ${esc(v.shopName)}</div>
             <div class="ec-meta">
               <span class="pill pill-visit">${esc(v.drinkType || '其他')}</span>${esc(v.drinkName || '')}${esc(extra)}${v.price != null ? ` · ¥${v.price}` : ''}
             </div>
@@ -272,8 +291,8 @@ const Views = (() => {
     view().innerHTML = `
       <section class="page">
         ${tabs}
-        <a class="btn btn-primary btn-block" href="#/bean/new" style="text-align:center;text-decoration:none;margin-bottom:12px;">＋ 添加豆子</a>
-        ${active.length ? active.map(beanCard).join('') : emptyHtml('豆库空空如也，去添一支豆子吧 🫘')}
+        <a class="btn btn-primary btn-block" href="#/bean/new" style="text-align:center;text-decoration:none;margin-bottom:12px;"><i class="fa-solid fa-plus" data-emo="＋"></i> 添加豆子</a>
+        ${active.length ? active.map(beanCard).join('') : emptyHtml('豆库空空如也，去添一支豆子吧', 'fa-seedling', '🫘')}
         ${finished.length ? `
           <details class="finished-wrap">
             <summary>已喝完（${finished.length}）</summary>
@@ -307,7 +326,7 @@ const Views = (() => {
       <article class="card bean-card" data-id="${b.id}">
         ${b.cardPhoto
           ? `<img class="bc-photo" src="${b.cardPhoto}" alt="">`
-          : `<div class="bc-photo bc-no-photo">🫘</div>`}
+          : `<div class="bc-photo bc-no-photo"><i class="fa-solid fa-seedling" data-emo="🫘"></i></div>`}
         <div class="bc-body">
           <div class="bc-name">${esc(b.name)}</div>
           <div class="bc-origin">${esc([b.origin, b.region].filter(Boolean).join(' · ') || '—')}</div>
@@ -332,7 +351,7 @@ const Views = (() => {
     view().innerHTML = `
       <section class="page">
         ${tabs}
-        <button class="btn btn-primary btn-block" id="btn-add" style="margin-bottom:12px;">＋ 添加器具</button>
+        <button class="btn btn-primary btn-block" id="btn-add" style="margin-bottom:12px;"><i class="fa-solid fa-plus" data-emo="＋"></i> 添加器具</button>
         <div class="card">
           ${list.length ? list.map((p) => `
             <div class="list-row ${p.isArchived ? 'is-archived' : ''}" data-id="${p.id}">
@@ -389,7 +408,7 @@ const Views = (() => {
     view().innerHTML = `
       <section class="page">
         ${tabs}
-        <button class="btn btn-primary btn-block" id="btn-add" style="margin-bottom:12px;">＋ 添加磨豆机</button>
+        <button class="btn btn-primary btn-block" id="btn-add" style="margin-bottom:12px;"><i class="fa-solid fa-plus" data-emo="＋"></i> 添加磨豆机</button>
         <div class="card">
           ${list.length ? list.map((m) => `
             <div class="list-row ${m.isArchived ? 'is-archived' : ''}" data-id="${m.id}">
@@ -451,7 +470,7 @@ const Views = (() => {
       <section class="page">
         <h2 class="page-title">${editing ? '编辑豆子' : '添加豆子'}</h2>
 
-        <button type="button" class="btn-photo" id="btn-photo">📷 拍摄咖啡卡片识别</button>
+        <button type="button" class="btn-photo" id="btn-photo"><i class="fa-solid fa-camera" data-emo="📷"></i> 拍摄咖啡卡片识别</button>
         <input type="file" id="file-photo" accept="image/*" capture="environment" hidden>
         <div id="recog-status"></div>
         <div id="photo-preview">${cardPhoto ? `<img src="${cardPhoto}" alt="卡片照片">` : ''}</div>
@@ -534,17 +553,17 @@ const Views = (() => {
 
     async function runRecognize() {
       try {
-        status.innerHTML = `<div class="recog-loading">🔍 大模型识别中</div>`;
+        status.innerHTML = `<div class="recog-loading"><i class="fa-solid fa-magnifying-glass" data-emo="🔍"></i> 大模型识别中</div>`;
         const info = await LLM.recognize(cardPhoto);
         fillForm(info); // 3) 解析 JSON → 回填表单（由用户确认后再保存，禁止直接入库）
-        status.innerHTML = `<div class="recog-ok">✅ 识别完成，请核对表单后再保存</div>`;
+        status.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 识别完成，请核对表单后再保存</div>`;
       } catch (err) {
         showRecogError(err);
       }
     }
 
     function showRecogError(err) {
-      status.innerHTML = `<div class="recog-error">❌ ${esc(err.message || '识别失败')}
+      status.innerHTML = `<div class="recog-error"><i class="fa-solid fa-circle-exclamation" data-emo="❌"></i> ${esc(err.message || '识别失败')}
         <button type="button" class="btn btn-mini" id="btn-retry" style="margin-left:8px;">重试</button></div>`;
       $('#btn-retry')?.addEventListener('click', () => { if (cardPhoto) runRecognize(); });
     }
@@ -607,7 +626,7 @@ const Views = (() => {
       if (bean.remainingWeight <= 0) bean.status = 'finished';
       else if (bean.status === 'finished') bean.status = 'active';
       await Store.beans.put(bean);
-      toast('已保存 🫘');
+      toast('已保存');
       location.hash = '#/library/beans';
     });
   }
@@ -635,7 +654,7 @@ const Views = (() => {
         millId: null,
         brew: { dose: 15, water: 225, temp: 92, millSetting: '', steps: [], totalTime: '', yield: null, pressure: null, extractionTime: null },
         tasting: { acidity: 3, sweetness: 3, bitterness: 3, body: 3, aroma: 3, score: 7, notes: '' },
-        mood: '😀',
+        mood: 'happy',
       };
     }
     wizStep = 1;
@@ -684,8 +703,9 @@ const Views = (() => {
       else renderStep3();
     } catch (err) {
       console.error('向导渲染失败', err);
-      $('#wiz-body').innerHTML = `<div class="recog-error">⚠️ 页面渲染出错：${esc(err.message)}<br>仍可尝试点击底部按钮。</div>`;
+      $('#wiz-body').innerHTML = `<div class="recog-error"><i class="fa-solid fa-triangle-exclamation" data-emo="⚠️"></i> 页面渲染出错：${esc(err.message)}<br>仍可尝试点击底部按钮。</div>`;
     }
+    Icons.fix(view()); // 向导内重渲染同样走降级兜底
   }
 
   /* ---- 第一步：选豆子 ---- */
@@ -730,7 +750,7 @@ const Views = (() => {
       .filter((e) => e.beanId === wiz.beanId && (!wizOriginal || e.id !== wizOriginal.id))
       .sort((a, b) => b.createdAt - a.createdAt)[0];
     wrap.innerHTML = last
-      ? `<button class="btn btn-block copy-last" id="btn-copy-last">📋 复制上次参数（${esc(prettyDate(last.date))}）</button>`
+      ? `<button class="btn btn-block copy-last" id="btn-copy-last"><i class="fa-solid fa-copy" data-emo="📋"></i> 复制上次参数（${esc(prettyDate(last.date))}）</button>`
       : '';
     $('#btn-copy-last')?.addEventListener('click', () => {
       // 一键带出上次的器具 / 磨豆机 / 全部冲煮参数
@@ -809,11 +829,11 @@ const Views = (() => {
             <label class="f-label">研磨刻度<input data-brew="millSetting" value="${esc(b.millSetting || '')}" placeholder="如 C40 24格"></label>
           </div>
           <div class="f-label" style="margin:10px 0 4px;">分段注水（累计水量）
-            <button type="button" class="btn btn-mini" id="btn-tpl" style="margin-left:8px;">✨ 经典三段式</button>
+            <button type="button" class="btn btn-mini" id="btn-tpl" style="margin-left:8px;"><i class="fa-solid fa-wand-magic-sparkles" data-emo="✨"></i> 经典三段式</button>
           </div>
           <div class="steps-head"><span>时间</span><span>累计g</span><span>备注</span><span></span></div>
           <div id="steps-wrap"></div>
-          <button type="button" class="btn btn-mini" id="btn-add-step">＋ 加一段</button>
+          <button type="button" class="btn btn-mini" id="btn-add-step"><i class="fa-solid fa-plus" data-emo="＋"></i> 加一段</button>
           <label class="f-label" style="margin-top:10px;">总时长
             <input data-brew="totalTime" id="in-totalTime" value="${esc(b.totalTime || '')}" placeholder="如 2:10">
           </label>
@@ -1018,7 +1038,7 @@ const Views = (() => {
           stopCountdown();
           $('#tm-start').textContent = '开始';
           if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
-          toast('⏰ 浸泡完成，可以出品了');
+          toast('浸泡完成，可以出品了');
         }
       }, 200);
       timers.push(cdIv);
@@ -1052,7 +1072,7 @@ const Views = (() => {
         ${slider('score', '总评分', 0, 10, 0.5)}
         <div class="f-label" style="margin:10px 0 6px;">心情</div>
         <div class="mood-row" id="mood-row">
-          ${MOODS.map((m) => `<button type="button" class="${wiz.mood === m ? 'sel' : ''}" data-m="${m}">${m}</button>`).join('')}
+          ${moodBtnHtml(wiz.mood)}
         </div>
         <label class="f-label" style="margin-top:12px;">品鉴笔记
           <textarea id="taste-notes" placeholder="今天的风味如何？">${esc(t.notes || '')}</textarea>
@@ -1119,7 +1139,7 @@ const Views = (() => {
       // 规则 1：保存 —— 扣减豆量；remainingWeight<=0 自动转 finished（在 adjustBeanWeight 内完成）
       await Store.adjustBeanWeight(e.beanId, -num(e.brew.dose));
       await Store.entries.put(e);
-      toast('已记录一杯 ☕');
+      toast('已记录一杯');
       location.hash = '#/';
     } catch (err) {
       // 失败时给出具体原因（如 IndexedDB 不可用/存储超限），不再静默
@@ -1159,13 +1179,13 @@ const Views = (() => {
     const editing = id ? await Store.visits.get(id) : null;
     let photo = editing?.photo || null;      // 压缩后的 base64 照片（饮品/菜单/店面）
     let drinkType = editing?.drinkType || '奶咖';
-    let mood = editing?.mood || '😀';
+    let mood = editing?.mood || 'happy';
 
     view().innerHTML = `
       <section class="page">
-        <h2 class="page-title">${editing ? '编辑探店记录' : '🏪 探店打卡'}</h2>
+        <h2 class="page-title">${editing ? '编辑探店记录' : '<i class="fa-solid fa-store" data-emo="🏪"></i> 探店打卡'}</h2>
 
-        <button type="button" class="btn-photo" id="btn-photo">📷 拍照识别出品 / 菜单</button>
+        <button type="button" class="btn-photo" id="btn-photo"><i class="fa-solid fa-camera" data-emo="📷"></i> 拍照识别出品 / 菜单</button>
         <input type="file" id="file-photo" accept="image/*" capture="environment" hidden>
         <div id="recog-status"></div>
         <div id="photo-preview">${photo ? `<img src="${photo}" alt="探店照片">` : ''}</div>
@@ -1214,7 +1234,7 @@ const Views = (() => {
           </div>
           <div class="f-label" style="margin:2px 0 4px;">心情</div>
           <div class="mood-row" id="mood-row">
-            ${MOODS.map((m) => `<button type="button" class="${mood === m ? 'sel' : ''}" data-m="${m}">${m}</button>`).join('')}
+            ${moodBtnHtml(mood)}
           </div>
           <label class="f-label">笔记
             <textarea name="notes" placeholder="环境、出品、豆子风味…">${esc(editing?.notes || '')}</textarea>
@@ -1275,15 +1295,15 @@ const Views = (() => {
 
     async function runRecognize() {
       try {
-        status.innerHTML = `<div class="recog-loading">🔍 大模型识别中</div>`;
+        status.innerHTML = `<div class="recog-loading"><i class="fa-solid fa-magnifying-glass" data-emo="🔍"></i> 大模型识别中</div>`;
         const info = await LLM.recognizeVisit(photo);
         fillForm(info); // 仅回填表单，品种细节由用户确认/修改后再保存
-        status.innerHTML = `<div class="recog-ok">✅ 识别完成，请核对品种细节后再保存</div>`;
+        status.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 识别完成，请核对品种细节后再保存</div>`;
       } catch (err) { showRecogError(err); }
     }
 
     function showRecogError(err) {
-      status.innerHTML = `<div class="recog-error">❌ ${esc(err.message || '识别失败')}
+      status.innerHTML = `<div class="recog-error"><i class="fa-solid fa-circle-exclamation" data-emo="❌"></i> ${esc(err.message || '识别失败')}
         <button type="button" class="btn btn-mini" id="btn-retry" style="margin-left:8px;">重试</button></div>`;
       $('#btn-retry')?.addEventListener('click', () => { if (photo) runRecognize(); });
     }
@@ -1338,7 +1358,7 @@ const Views = (() => {
       };
       try {
         await Store.visits.put(visit);
-        toast('已记录一次探店 🏪');
+        toast('已记录一次探店');
         location.hash = '#/';
       } catch (err) {
         console.error('保存失败', err);
@@ -1398,7 +1418,7 @@ const Views = (() => {
         <div class="map-chips" id="map-chips">
           ${groups.map((g) => `<button class="map-chip ${g.country.key === mapState.sel ? 'sel' : ''}" data-key="${g.country.key}">${esc(g.country.zh)} ${g.cups}杯</button>`).join('')}
         </div>
-        <div id="map-detail"></div>` : emptyHtml('还没有带产地信息的豆子，去豆库补充产地国家吧 🌍')}
+        <div id="map-detail"></div>` : emptyHtml('还没有带产地信息的豆子，去豆库补充产地国家吧', 'fa-earth-americas', '🌍')}
         ${unmatched.length ? `<div class="map-unmatched">未识别产地的豆子：${unmatched.map((b) => esc(b.name)).join('、')}，可在豆库编辑补充「产地国家」</div>` : ''}
       </section>`;
 
@@ -1507,7 +1527,7 @@ const Views = (() => {
     box.innerHTML = `
       <div class="card">
         <div class="map-detail-head">
-          <span class="map-detail-title">📍 ${esc(g.country.zh)}</span>
+          <span class="map-detail-title"><i class="fa-solid fa-location-dot" data-emo="📍"></i> ${esc(g.country.zh)}</span>
           <span class="map-detail-sub">${g.beans.length} 支豆 · ${g.cups} 杯</span>
         </div>
         ${g.beans.sort((a, b) => b.cups - a.cups).map(({ bean, cups, avg }) => `
@@ -1524,7 +1544,7 @@ const Views = (() => {
       Store.entries.getAll(), Store.beans.getAll(), Store.preparations.getAll(),
     ]);
     if (!entries.length) {
-      view().innerHTML = `<section class="page"><h2 class="page-title">统计</h2>${emptyHtml('还没有数据，冲几杯后再来看吧 📊')}</section>`;
+      view().innerHTML = `<section class="page"><h2 class="page-title">统计</h2>${emptyHtml('还没有数据，冲几杯后再来看吧', 'fa-chart-line', '📊')}</section>`;
       return;
     }
     const beanMap = Object.fromEntries(beans.map((b) => [b.id, b]));
@@ -1571,7 +1591,7 @@ const Views = (() => {
           <div class="card stat-card"><div class="sc-num">${streak}</div><div class="sc-label">连续冲煮天数</div></div>
           <div class="card stat-card"><div class="sc-num">${activeBeans}</div><div class="sc-label">在喝豆子</div></div>
         </div>
-        <a class="card map-entry" href="#/map">🌍 世界产地地图 · 看看咖啡来自哪里 ›</a>
+        <a class="card map-entry" href="#/map"><i class="fa-solid fa-earth-americas" data-emo="🌍"></i> 世界产地地图 · 看看咖啡来自哪里 ›</a>
         <div class="card chart-card"><h3>五维平均分</h3><div class="chart-box"><canvas id="c-radar"></canvas></div></div>
         <div class="card chart-card"><h3>豆子杯数排行</h3><div class="chart-box"><canvas id="c-bar"></canvas></div></div>
         <div class="card chart-card"><h3>评分趋势</h3><div class="chart-box"><canvas id="c-line"></canvas></div></div>
@@ -1649,10 +1669,10 @@ const Views = (() => {
         <div class="card settings-sec">
           <h3>数据管理</h3>
           <div class="form">
-            <button class="btn" id="btn-export">📤 导出全部数据（JSON）</button>
-            <button class="btn" id="btn-import">📥 导入数据（JSON）</button>
+            <button class="btn" id="btn-export"><i class="fa-solid fa-file-export" data-emo="📤"></i> 导出全部数据（JSON）</button>
+            <button class="btn" id="btn-import"><i class="fa-solid fa-file-import" data-emo="📥"></i> 导入数据（JSON）</button>
             <input type="file" id="file-import" accept="application/json,.json" hidden>
-            <button class="btn btn-danger" id="btn-clear">🗑 清空全部数据</button>
+            <button class="btn btn-danger" id="btn-clear"><i class="fa-solid fa-trash-can" data-emo="🗑"></i> 清空全部数据</button>
           </div>
         </div>
       </section>`;
@@ -1677,9 +1697,9 @@ const Views = (() => {
       box.innerHTML = '';
       try {
         const reply = await LLM.testConnection();
-        box.innerHTML = `<div class="test-result ok">✅ 连接成功：${esc(String(reply).slice(0, 50))}</div>`;
+        box.innerHTML = `<div class="test-result ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 连接成功：${esc(String(reply).slice(0, 50))}</div>`;
       } catch (err) {
-        box.innerHTML = `<div class="test-result err">❌ ${esc(err.message)}</div>`;
+        box.innerHTML = `<div class="test-result err"><i class="fa-solid fa-circle-exclamation" data-emo="❌"></i> ${esc(err.message)}</div>`;
       } finally {
         btn.disabled = false; btn.textContent = '测试连接';
       }
@@ -1724,7 +1744,7 @@ const Views = (() => {
         for (const k of KEYS) {
           for (const item of data[k]) await Store[k].put(item);
         }
-        toast('导入完成 ✅');
+        toast('导入完成');
       } catch (err) {
         toast('导入失败：' + err.message, 3200);
       }
@@ -1751,16 +1771,18 @@ const Views = (() => {
     cleanup(); // 销毁旧图表与计时器，防止泄漏
     const [a, b, c] = parts;
     switch (a || '') {
-      case '':         return timeline();
-      case 'library':  return library(b || 'beans');
-      case 'bean':     return beanForm(b === 'edit' ? c : null);
-      case 'entry':    return entryForm(b === 'edit' ? c : null);
-      case 'visit':    return visitForm(b === 'edit' ? c : null);
-      case 'stats':    return stats();
-      case 'map':      return mapView();
-      case 'settings': return settingsPage();
-      default:         return timeline();
+      case '':         await timeline(); break;
+      case 'library':  await library(b || 'beans'); break;
+      case 'bean':     await beanForm(b === 'edit' ? c : null); break;
+      case 'entry':    await entryForm(b === 'edit' ? c : null); break;
+      case 'visit':    await visitForm(b === 'edit' ? c : null); break;
+      case 'stats':    await stats(); break;
+      case 'map':      await mapView(); break;
+      case 'settings': await settingsPage(); break;
+      default:         await timeline();
     }
+    // FA 降级模式下，把新渲染出的图标替换为 emoji 兜底
+    Icons.fix(view());
   }
 
   return { render, toast };

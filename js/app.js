@@ -26,7 +26,7 @@
     } catch (err) {
       console.error(err);
       document.getElementById('view').innerHTML =
-        `<div class="page-error">😵 页面渲染失败：${String(err.message || err)}</div>`;
+        `<div class="page-error"><i class="fa-solid fa-triangle-exclamation" data-emo="😵"></i> 页面渲染失败：${String(err.message || err)}</div>`;
     }
     window.scrollTo(0, 0);
   }
@@ -34,6 +34,9 @@
   window.addEventListener('hashchange', render);
 
   window.addEventListener('DOMContentLoaded', async () => {
+    // FontAwesome CDN 加载检测，失败时降级为 emoji 文本（不阻塞渲染）
+    Icons.init();
+
     // 首次运行预置 6 个冲煮器具
     try { await Store.seed(); } catch (e) { console.warn('预置数据失败', e); }
 

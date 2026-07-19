@@ -12,13 +12,16 @@
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <!-- 霞鹜文楷 Web 字体（中文手账风格） -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css">
+  <!-- FontAwesome 6 免费版（solid/regular，CDN 加载；失败时置标记由 js/icons.js 降级） -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.2/css/all.min.css"
+        onerror="window.__faFailed=true">
   <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
   <!-- 深咖啡色顶栏（右侧地球入口直达产地地图） -->
   <header class="topbar">
     <h1>咖啡手账</h1>
-    <a class="topbar-map" href="#/map" aria-label="世界产地地图">🌍</a>
+    <a class="topbar-map" href="#/map" aria-label="世界产地地图"><i class="fa-solid fa-earth-americas" data-emo="🌍"></i></a>
   </header>
 
   <!-- SPA 视图容器：所有页面由 js/views.js 渲染进这里 -->
@@ -26,11 +29,11 @@
 
   <!-- 底部 Tab：时间线 | 豆库 | ＋（居中放大） | 统计 | 设置 -->
   <nav class="tabbar">
-    <a href="#/" data-tab="timeline"><span class="tab-ico">📖</span>时间线</a>
-    <a href="#/library" data-tab="library"><span class="tab-ico">🫘</span>豆库</a>
-    <a href="#/entry/new" data-tab="add" class="tab-add"><span>＋</span></a>
-    <a href="#/stats" data-tab="stats"><span class="tab-ico">📊</span>统计</a>
-    <a href="#/settings" data-tab="settings"><span class="tab-ico">⚙️</span>设置</a>
+    <a href="#/" data-tab="timeline"><i class="fa-solid fa-book-open" data-emo="📖"></i>时间线</a>
+    <a href="#/library" data-tab="library"><i class="fa-solid fa-seedling" data-emo="🫘"></i>豆库</a>
+    <a href="#/entry/new" data-tab="add" class="tab-add"><span><i class="fa-solid fa-plus" data-emo="＋"></i></span></a>
+    <a href="#/stats" data-tab="stats"><i class="fa-solid fa-chart-simple" data-emo="📊"></i>统计</a>
+    <a href="#/settings" data-tab="settings"><i class="fa-solid fa-gear" data-emo="⚙️"></i>设置</a>
   </nav>
 
   <div id="toast"></div>
@@ -40,6 +43,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="./js/store.js"></script>
   <script src="./js/worldmap.js"></script>
+  <script src="./js/icons.js"></script>
   <script src="./js/image.js"></script>
   <script src="./js/llm.js"></script>
   <script src="./js/views.js"></script>
