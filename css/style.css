@@ -512,6 +512,41 @@ input[type=range]::-moz-range-thumb {
 .test-result.ok { background: #eaf3e6; color: #47703f; }
 .test-result.err { background: #f9ece7; color: #a0462d; }
 
+/* ---------------- 风味轮选择器 ---------------- */
+.flavor-head { display: flex; justify-content: space-between; align-items: center; }
+.fw-mask {
+  position: fixed; inset: 0; z-index: 110;
+  background: rgba(62, 47, 37, .45);
+  display: flex; align-items: flex-end; justify-content: center;
+  animation: fadein .15s ease;
+}
+.fw-sheet {
+  background: var(--paper); width: 100%; max-width: 640px;
+  max-height: 72vh; overflow-y: auto;
+  border-radius: 16px 16px 0 0; border: 1px solid var(--line);
+  padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+  animation: fw-up .2s ease;
+}
+@keyframes fw-up { from { transform: translateY(30px); opacity: .6; } to { transform: none; opacity: 1; } }
+.fw-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.fw-title { font-family: 'LXGW Wenkai', serif; font-size: 16px; color: var(--coffee); }
+.fw-cats { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 8px; -webkit-overflow-scrolling: touch; }
+.fw-cat {
+  flex: 0 0 auto; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--card);
+  font-family: inherit; font-size: 13px; color: var(--ink); cursor: pointer;
+}
+.fw-cat.sel { background: var(--coffee); color: #fffaf2; border-color: var(--coffee); }
+.fw-items { display: flex; flex-wrap: wrap; gap: 8px; }
+.fw-item {
+  padding: 8px 14px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--card);
+  font-family: inherit; font-size: 14px; color: var(--ink); cursor: pointer;
+  transition: transform .08s ease, background .12s, border-color .12s;
+}
+.fw-item:active { transform: scale(.95); }
+.fw-item.sel { background: #f1e4d7; color: #8a5a34; border-color: var(--accent); font-weight: 700; }
+
 /* ---------------- 弹窗 / Toast ---------------- */
 .modal-mask {
   position: fixed; inset: 0; z-index: 100;

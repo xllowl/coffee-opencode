@@ -127,6 +127,53 @@ const Views = (() => {
     });
   }
 
+  /* ================= 风味轮选择器 ================= */
+  /**
+   * 底部弹层：16 风味大类（中国版风味轮）→ 点选风味标签
+   * @param {string[]} tags 当前标签数组（就地增删）
+   * @param {Function} onChange 点选后回调（用于重绘标签区）
+   */
+  function openFlavorWheel(tags, onChange) {
+    // 默认展开已选中风味所在的大类，否则展开「花香」
+    let curIdx = FlavorWheel.CATEGORIES.findIndex((c) => c.items.some((it) => tags.includes(it)));
+    if (curIdx < 0) curIdx = 0;
+
+    const mask = document.createElement('div');
+    mask.className = 'fw-mask';
+    const render = () => {
+      const cat = FlavorWheel.CATEGORIES[curIdx];
+      mask.innerHTML = `
+        <div class="fw-sheet">
+          <div class="fw-head">
+            <span class="fw-title"><i class="fa-solid fa-fan" data-emo="🎡"></i> 风味轮 · ${esc(cat.zh)}</span>
+            <button type="button" class="btn btn-mini btn-primary" data-act="done">完成</button>
+          </div>
+          <div class="fw-cats">
+            ${FlavorWheel.CATEGORIES.map((c, i) => `<button type="button" class="fw-cat ${i === curIdx ? 'sel' : ''}" data-i="${i}">${esc(c.zh)}</button>`).join('')}
+          </div>
+          <div class="fw-items">
+            ${cat.items.map((it) => `<button type="button" class="fw-item ${tags.includes(it) ? 'sel' : ''}" data-f="${esc(it)}">${esc(it)}</button>`).join('')}
+          </div>
+        </div>`;
+      Icons.fix(mask); // FA 降级模式下兜底
+    };
+    render();
+    mask.addEventListener('click', (e) => {
+      if (e.target === mask || e.target.dataset.act === 'done') { mask.remove(); onChange(); return; }
+      const c = e.target.closest('.fw-cat');
+      if (c) { curIdx = +c.dataset.i; render(); return; }
+      const f = e.target.closest('.fw-item');
+      if (f) {
+        const v = f.dataset.f;
+        const i = tags.indexOf(v);
+        if (i >= 0) tags.splice(i, 1); else tags.push(v); // 点选切换，自动去重
+        f.classList.toggle('sel');
+        onChange();
+      }
+    });
+    document.body.appendChild(mask);
+  }
+
   /* ================= 图表 / 计时器清理 ================= */
   let charts = [];
   let timers = [];
@@ -609,12 +656,16 @@ const Views = (() => {
             <label class="f-label">价格 ¥<input name="price" type="number" inputmode="decimal" min="0" value="${editing?.price ?? ''}"></label>
           </div>
           ${editing ? `<label class="f-label">剩余克数 g<input name="remainingWeight" type="number" inputmode="decimal" min="0" value="${num(editing.remainingWeight)}"></label>` : ''}
-          <label class="f-label">风味标签（回车添加）
+          <div class="f-label">
+            <div class="flavor-head">
+              <span>风味标签（回车添加）</span>
+              <button type="button" class="btn btn-mini" id="btn-fw"><i class="fa-solid fa-fan" data-emo="🎡"></i> 风味轮</button>
+            </div>
             <div class="tag-box" id="tag-box">
               ${tags.map((t, i) => tagChip(t, i)).join('')}
               <input id="tag-input" placeholder="如 茉莉花香，回车添加">
             </div>
-          </label>
+          </div>
           <button type="submit" class="btn btn-primary btn-block" style="padding:14px;font-size:16px;">保存</button>
         </form>
       </section>`;
@@ -639,6 +690,8 @@ const Views = (() => {
     tagBox.addEventListener('click', (e) => {
       if (e.target.dataset.i != null) { tags.splice(+e.target.dataset.i, 1); redrawTags(); }
     });
+    // 风味轮选择
+    $('#btn-fw').addEventListener('click', () => openFlavorWheel(tags, redrawTags));
 
     /* ---- 拍照识别流程 ---- */
     const status = $('#recog-status');
@@ -1187,7 +1240,10 @@ const Views = (() => {
         ${slider('body', '醇厚度', 1, 5, 0.5)}
         ${slider('aroma', '香气', 1, 5, 0.5)}
         ${slider('score', '总评分', 0, 10, 0.5)}
-        <div class="f-label" style="margin:10px 0 6px;">风味描述（默认带出豆库标签，可自定义增减）</div>
+        <div class="f-label flavor-head" style="margin:10px 0 6px;">
+          <span>风味描述（默认带出豆库标签，可自定义增减）</span>
+          <button type="button" class="btn btn-mini" id="btn-fw-step3"><i class="fa-solid fa-fan" data-emo="🎡"></i> 风味轮</button>
+        </div>
         <div class="tag-box" id="flavor-box">
           ${t.flavors.map((x, i) => `<span class="tag-chip">${esc(x)}<button type="button" data-i="${i}">×</button></span>`).join('')}
           <input id="flavor-input" placeholder="回车添加，如 柑橘">
@@ -1260,6 +1316,8 @@ const Views = (() => {
     fbox.addEventListener('click', (e) => {
       if (e.target.dataset.i != null) { t.flavors.splice(+e.target.dataset.i, 1); redrawFlavors(); }
     });
+    // 风味轮选择
+    $('#btn-fw-step3').addEventListener('click', () => openFlavorWheel(t.flavors, redrawFlavors));
   }
 
   /* ---- 保存 / 删除记录（核心业务规则 1/2/3） ---- */
