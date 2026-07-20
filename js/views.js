@@ -473,7 +473,7 @@ const Views = (() => {
           <span class="ec-mood">${esc(moodEmoji(e.mood))}</span>
         </div>
         <div class="ec-bean">${esc(b ? b.name : '（豆子已删除）')}</div>
-        <div class="ec-meta">${esc(p ? p.name : '—')} · 粉水比 ${ratioText(e)} · 粉 ${num(e.brew?.dose) || '-'}g</div>
+        <div class="ec-meta">${esc(p ? p.name : '—')}${e.temperature ? `（${esc(e.temperature)}）` : ''} · 粉水比 ${ratioText(e)} · 粉 ${num(e.brew?.dose) || '-'}g</div>
         <div class="ec-foot">
           <span class="ec-score">★ ${e.tasting?.score ?? '—'}</span>
           ${notes ? `<span class="ec-notes">${esc(notes)}</span>` : ''}
@@ -915,6 +915,7 @@ const Views = (() => {
         beanId: null,
         preparationId: null,
         millId: null,
+        temperature: null, // 热 | 冰 | null
         brew: { dose: 15, water: 225, temp: 92, millSetting: '', steps: [], totalTime: '', yield: null, pressure: null, extractionTime: null },
         tasting: { acidity: 3, sweetness: 3, bitterness: 3, body: 3, aroma: 3, score: 7, notes: '', flavors: [] },
         mood: '😀',
@@ -1019,10 +1020,11 @@ const Views = (() => {
       ? `<button class="btn btn-block copy-last" id="btn-copy-last"><i class="fa-solid fa-copy" data-emo="📋"></i> 复制上次参数（${esc(prettyDate(last.date))}）</button>`
       : '';
     $('#btn-copy-last')?.addEventListener('click', () => {
-      // 一键带出上次的器具 / 磨豆机 / 全部冲煮参数
+      // 一键带出上次的器具 / 磨豆机 / 全部冲煮参数（含温度）
       wiz.preparationId = last.preparationId;
       wiz.millId = last.millId;
       wiz.brew = JSON.parse(JSON.stringify(last.brew));
+      wiz.temperature = last.temperature ?? null;
       toast('已复制上次参数');
       wizStep = 2;
       renderWiz();
@@ -1346,6 +1348,10 @@ const Views = (() => {
           ${t.flavors.map((x, i) => `<span class="tag-chip"${flavorStyle(x)}>${esc(x)}<button type="button" data-i="${i}">×</button></span>`).join('')}
           <input id="flavor-input" placeholder="回车添加，如 柑橘">
         </div>
+        <div class="f-label" style="margin:10px 0 6px;">温度</div>
+        <div class="drink-pills" id="temp-pills">
+          ${TEMPERATURES.map((t) => `<button type="button" class="drink-pill ${wiz.temperature === t ? 'sel' : ''}" data-t="${t}">${t}</button>`).join('')}
+        </div>
         <div class="f-label" style="margin:10px 0 6px;">心情</div>
         <div class="mood-row" id="mood-row">
           ${moodBtnHtml(wiz.mood)}
@@ -1394,6 +1400,15 @@ const Views = (() => {
       wiz.mood = btn.dataset.m;
       $$('#mood-row button').forEach((x) => x.classList.toggle('sel', x === btn));
     });
+
+    // 温度选择：单选，再点一次取消（允许不记）
+    $('#temp-pills').addEventListener('click', (e) => {
+      const pill = e.target.closest('.drink-pill');
+      if (!pill) return;
+      wiz.temperature = wiz.temperature === pill.dataset.t ? null : pill.dataset.t;
+      $$('#temp-pills .drink-pill').forEach((x) => x.classList.toggle('sel', x.dataset.t === wiz.temperature));
+    });
+
     $('#taste-notes').addEventListener('input', (e) => { t.notes = e.target.value; });
 
     // 风味描述标签：回车添加、点 × 删除
