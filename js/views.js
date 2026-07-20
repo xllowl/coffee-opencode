@@ -281,7 +281,7 @@ const Views = (() => {
     return `<div class="empty"><span class="emo"><i class="fa-solid ${ico}" data-emo="${emo}"></i></span>${esc(text)}</div>`;
   }
 
-  /** 近 12 周冲煮日历热力图（纯 CSS grid，7 行 × 12 列，列=周） */
+  /** 近 12 周冲煮日历热力图（GitHub 风格：顶部月份标签 + 左侧周几标签，列=周） */
   function heatmapHtml(entries) {
     const counts = {};
     entries.forEach((e) => { counts[e.date] = (counts[e.date] || 0) + 1; });
@@ -289,13 +289,30 @@ const Views = (() => {
     const start = new Date(today); start.setDate(start.getDate() - 7 * 12 + 1);
     start.setDate(start.getDate() - ((start.getDay() + 6) % 7)); // 起点对齐到周一
     const cells = [];
+    const months = [];
+    let prevMonth = -1, i = 0;
     for (const d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+      if (i % 7 === 0) {
+        // 每列（周）第一天：月份发生变化时输出月份标签
+        const m = d.getMonth();
+        months.push(m !== prevMonth ? `${m + 1}月` : '');
+        prevMonth = m;
+      }
+      i++;
       const key = fmtDate(d);
       const c = counts[key] || 0;
       const lv = c === 0 ? 0 : c >= 4 ? 4 : c; // 0/1/2/3/4+ 五档
       cells.push(`<div class="hm-cell hm-${lv}" title="${key} · ${c} 杯"></div>`);
     }
-    return `<div class="heatmap card"><div class="hm-title">近 12 周</div><div class="hm-grid">${cells.join('')}</div></div>`;
+    const weekdays = ['一', '', '三', '', '五', '', '']; // GitHub 风格：只标注 周一/三/五
+    return `<div class="heatmap card">
+      <div class="hm-title">近 12 周</div>
+      <div class="hm-months">${months.map((m) => `<span>${m}</span>`).join('')}</div>
+      <div class="hm-body">
+        <div class="hm-weekdays">${weekdays.map((w) => `<span>${w}</span>`).join('')}</div>
+        <div class="hm-grid">${cells.join('')}</div>
+      </div>
+    </div>`;
   }
 
   function entryCard(e, beanMap, prepMap) {
