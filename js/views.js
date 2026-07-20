@@ -332,7 +332,8 @@ const Views = (() => {
     openSwipe = null;
     $$('.swipe-wrap').forEach((wrap) => {
       bindSwipe(wrap);
-      wrap.querySelector('.entry-card').addEventListener('click', () => {
+      wrap.querySelector('.entry-card').addEventListener('click', (e) => {
+        if (e.target.closest('a.vc-link')) return; // 点链接图标 → 新标签打开，不进入编辑
         if (wrap.dataset.justSwiped === '1') { wrap.dataset.justSwiped = ''; return; } // 刚滑完，不触发跳转
         if (wrap.classList.contains('swiped')) { closeSwipe(wrap); return; }             // 展开态点击 = 收起
         location.hash = (wrap.dataset.kind === 'visit' ? '#/visit/edit/' : '#/entry/edit/') + wrap.dataset.id;
@@ -504,7 +505,7 @@ const Views = (() => {
         <div class="ec-main-row">
           ${v.photo ? `<img class="vc-photo" src="${v.photo}" alt="">` : ''}
           <div class="ec-main">
-            <div class="ec-bean"><i class="fa-solid fa-store" data-emo="🏪"></i> ${esc(v.shopName)}</div>
+            <div class="ec-bean"><i class="fa-solid fa-store" data-emo="🏪"></i> ${esc(v.shopName)}${v.link ? ` <a class="vc-link" href="${esc(v.link)}" target="_blank" rel="noopener" title="打开店铺链接"><i class="fa-solid fa-arrow-up-right-from-square" data-emo="🔗"></i></a>` : ''}</div>
             <div class="ec-meta">
               <span class="pill pill-visit">${esc(v.drinkType || '其他')}</span>${esc(v.drinkName || '')}${v.temperature ? `（${esc(v.temperature)}）` : ''}${esc(extra)}${v.price != null ? ` · ¥${v.price}` : ''}
             </div>
@@ -1474,6 +1475,22 @@ const Views = (() => {
     }
   }
 
+  /**
+   * 从地图链接解析店铺信息（纯 URL 解析，不联网）
+   * 谷歌地图完整链接：/place/店名/... 与 @纬度,经度
+   */
+  function parseLinkInfo(url) {
+    const out = { shopName: null, location: null };
+    try {
+      const u = new URL(url);
+      const m = u.pathname.match(/\/place\/([^/]+)/);
+      if (m) out.shopName = decodeURIComponent(m[1]).replace(/\+/g, ' ');
+      const c = (u.pathname + u.search).match(/@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/);
+      if (c) out.location = `${c[1]},${c[2]}`;
+    } catch { /* 非合法 URL 时返回空 */ }
+    return out;
+  }
+
   /* ================= 4b. 探店记录表单 ================= */
   // 出品品种：五大类；datalist 之外可直接输入自定义品种
   const DRINK_TYPES = ['黑咖', '奶咖', '手冲', '特调', '其他'];
@@ -1512,6 +1529,13 @@ const Views = (() => {
           </div>
           <label class="f-label">店名 *<input name="shopName" required value="${esc(editing?.shopName || '')}" placeholder="如 % Arabica"></label>
           <label class="f-label">地址 / 城市<input name="location" value="${esc(editing?.location || '')}"></label>
+          <label class="f-label">店铺链接（大众点评 / 谷歌地图）
+            <div class="link-row">
+              <input name="link" value="${esc(editing?.link || '')}" placeholder="粘贴链接，谷歌地图可自动提取" inputmode="url">
+              <button type="button" class="btn btn-mini" id="btn-parse-link">提取</button>
+            </div>
+          </label>
+          <div id="link-hint"></div>
           <div class="f-label">出品品种</div>
           <div class="drink-pills" id="drink-pills">
             ${DRINK_TYPES.map((t) => `<button type="button" class="drink-pill ${t === drinkType ? 'sel' : ''}" data-t="${t}">${t}</button>`).join('')}
@@ -1596,6 +1620,26 @@ const Views = (() => {
 
     // 评分滑块实时数值
     form.elements.rating.addEventListener('input', (e) => { $('#sv-rating').textContent = e.target.value; });
+
+    /* ---- 从链接提取店铺信息 ---- */
+    $('#btn-parse-link').addEventListener('click', () => {
+      const url = form.elements.link.value.trim();
+      const hint = $('#link-hint');
+      if (!url) { hint.innerHTML = `<div class="recog-error">请先粘贴链接</div>`; return; }
+      const info = parseLinkInfo(url);
+      if (info.shopName) {
+        form.elements.shopName.value = info.shopName; // 谷歌地图 /place/店名/
+        if (info.location && !form.elements.location.value) form.elements.location.value = info.location;
+        hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已从链接提取：${esc(info.shopName)}${info.location ? `（${esc(info.location)}）` : ''}</div>`;
+        Icons.fix(hint);
+      } else if (/dianping\.com|dpfile\.com/.test(url)) {
+        hint.innerHTML = `<div class="recog-loading">大众点评有反爬限制，浏览器端无法读取页面内容；链接会随记录保存，可在时间线一键跳转</div>`;
+      } else if (/maps\.app\.goo\.gl|goo\.gl/.test(url)) {
+        hint.innerHTML = `<div class="recog-loading">谷歌短链无法在浏览器端展开，请粘贴完整链接（含 /place/店名）；链接仍会随记录保存</div>`;
+      } else {
+        hint.innerHTML = `<div class="recog-loading">未识别到可提取的信息，链接仍会随记录保存</div>`;
+      }
+    });
 
     // 心情选择
     $('#mood-row').addEventListener('click', (e) => {
@@ -1684,6 +1728,7 @@ const Views = (() => {
         location: orNull(form.elements.location.value),
         drinkType,
         drinkName: orNull(form.elements.drinkName.value),
+        link: orNull(form.elements.link.value), // 大众点评 / 谷歌地图链接
         temperature, // 热 | 冰 | null（全部品类通用）
         // 品类专属字段：仅对应品类下保存，其余置 null
         espressoBean: drinkType === '奶咖' ? orNull(form.elements.espressoBean.value) : null,
