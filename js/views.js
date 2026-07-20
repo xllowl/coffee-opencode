@@ -127,9 +127,15 @@ const Views = (() => {
     });
   }
 
-  /* ================= 风味轮选择器 ================= */
+  /* ================= 风味轮：着色与可视化 ================= */
+  /** 风味标签按所属大类着色（自定义风味保持默认色） */
+  function flavorStyle(name) {
+    const c = FlavorWheel.colorOf(name);
+    return c ? ` style="background:${c.bg};color:${c.fg};border-color:${c.bd}"` : '';
+  }
+
   /**
-   * 底部弹层：16 风味大类（中国版风味轮）→ 点选风味标签
+   * 风味轮底部弹层：Canvas 环形轮盘（16 大类彩色扇区）点选切换 + 风味芯片点选
    * @param {string[]} tags 当前标签数组（就地增删）
    * @param {Function} onChange 点选后回调（用于重绘标签区）
    */
@@ -142,36 +148,115 @@ const Views = (() => {
     mask.className = 'fw-mask';
     const render = () => {
       const cat = FlavorWheel.CATEGORIES[curIdx];
+      const cc = cat.color;
       mask.innerHTML = `
         <div class="fw-sheet">
           <div class="fw-head">
             <span class="fw-title"><i class="fa-solid fa-fan" data-emo="🎡"></i> 风味轮 · ${esc(cat.zh)}</span>
             <button type="button" class="btn btn-mini btn-primary" data-act="done">完成</button>
           </div>
-          <div class="fw-cats">
-            ${FlavorWheel.CATEGORIES.map((c, i) => `<button type="button" class="fw-cat ${i === curIdx ? 'sel' : ''}" data-i="${i}">${esc(c.zh)}</button>`).join('')}
-          </div>
+          <div class="fw-wheel"><canvas id="fw-canvas"></canvas></div>
           <div class="fw-items">
-            ${cat.items.map((it) => `<button type="button" class="fw-item ${tags.includes(it) ? 'sel' : ''}" data-f="${esc(it)}">${esc(it)}</button>`).join('')}
+            ${cat.items.map((it) => {
+              const on = tags.includes(it);
+              return `<button type="button" class="fw-item ${on ? 'sel' : ''}" data-f="${esc(it)}"${on ? ` style="background:${cc.bg};border-color:${cc.bd};color:${cc.fg};font-weight:700;"` : ''}>${esc(it)}</button>`;
+            }).join('')}
           </div>
         </div>`;
       Icons.fix(mask); // FA 降级模式下兜底
+      drawFlavorWheel();
     };
+
+    /** Canvas 环形轮盘：16 扇区按大类配色，选中扇区高亮，中心显示当前大类 */
+    function drawFlavorWheel() {
+      const canvas = mask.querySelector('#fw-canvas');
+      if (!canvas) return;
+      const cats = FlavorWheel.CATEGORIES;
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth;
+      if (!w) return;
+      canvas.style.height = w + 'px';
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(w * dpr);
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const cx = w / 2, cy = w / 2;
+      const rOut = w / 2 - 6, rIn = rOut * 0.52;
+      const span = (Math.PI * 2) / cats.length;
+      const start0 = -Math.PI / 2; // 正上方起
+
+      cats.forEach((c, i) => {
+        const a0 = start0 + i * span, a1 = a0 + span;
+        const sel = i === curIdx;
+        // 扇形环段
+        ctx.beginPath();
+        ctx.arc(cx, cy, rOut, a0, a1);
+        ctx.arc(cx, cy, rIn, a1, a0, true);
+        ctx.closePath();
+        ctx.globalAlpha = sel ? 1 : 0.5;
+        ctx.fillStyle = c.color.bg;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = sel ? 2.5 : 1.5;
+        ctx.strokeStyle = sel ? '#6f4e37' : '#fffdf8';
+        ctx.stroke();
+        // 沿半径方向的大类名（左半圈翻转防止倒立）
+        const mid = a0 + span / 2;
+        const rm = (rOut + rIn) / 2;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(mid);
+        ctx.fillStyle = sel ? '#3e2f25' : c.color.fg;
+        ctx.font = `${sel ? 'bold ' : ''}10px "LXGW Wenkai", Georgia, serif`;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center';
+        if (mid > Math.PI / 2 && mid < Math.PI * 1.5) {
+          ctx.rotate(Math.PI);
+          ctx.fillText(c.zh, -rm, 0);
+        } else {
+          ctx.fillText(c.zh, rm, 0);
+        }
+        ctx.restore();
+      });
+
+      // 中心圆：当前大类名
+      ctx.beginPath(); ctx.arc(cx, cy, rIn - 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#f5f0e8'; ctx.fill();
+      ctx.fillStyle = '#6f4e37';
+      ctx.font = 'bold 13px "LXGW Wenkai", Georgia, serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(cats[curIdx].zh, cx, cy);
+    }
+
+    document.body.appendChild(mask); // 先挂载再渲染，否则 canvas 无布局尺寸
     render();
     mask.addEventListener('click', (e) => {
       if (e.target === mask || e.target.dataset.act === 'done') { mask.remove(); onChange(); return; }
-      const c = e.target.closest('.fw-cat');
-      if (c) { curIdx = +c.dataset.i; render(); return; }
+      // 点击轮盘扇区 → 切换大类
+      if (e.target.id === 'fw-canvas') {
+        const rect = e.target.getBoundingClientRect();
+        const x = e.clientX - rect.left - rect.width / 2;
+        const y = e.clientY - rect.top - rect.height / 2;
+        const r = Math.hypot(x, y);
+        const rOut = rect.width / 2 - 6, rIn = rOut * 0.52;
+        if (r >= rIn && r <= rOut) {
+          let a = Math.atan2(y, x) + Math.PI / 2;
+          if (a < 0) a += Math.PI * 2;
+          curIdx = Math.min(FlavorWheel.CATEGORIES.length - 1, Math.floor(a / ((Math.PI * 2) / FlavorWheel.CATEGORIES.length)));
+          render();
+        }
+        return;
+      }
+      // 点击风味芯片 → 切换选中
       const f = e.target.closest('.fw-item');
       if (f) {
         const v = f.dataset.f;
         const i = tags.indexOf(v);
         if (i >= 0) tags.splice(i, 1); else tags.push(v); // 点选切换，自动去重
-        f.classList.toggle('sel');
+        render(); // 重绘以更新芯片配色
         onChange();
       }
     });
-    document.body.appendChild(mask);
   }
 
   /* ================= 图表 / 计时器清理 ================= */
@@ -380,7 +465,7 @@ const Views = (() => {
           <span class="ec-score">★ ${e.tasting?.score ?? '—'}</span>
           ${notes ? `<span class="ec-notes">${esc(notes)}</span>` : ''}
         </div>
-        ${e.tasting?.flavors?.length ? `<div class="ec-flavors">${e.tasting.flavors.map((x) => `<span class="flavor-chip">${esc(x)}</span>`).join('')}</div>` : ''}
+        ${e.tasting?.flavors?.length ? `<div class="ec-flavors">${e.tasting.flavors.map((x) => `<span class="flavor-chip"${flavorStyle(x)}>${esc(x)}</span>`).join('')}</div>` : ''}
       </article>
       </div>`;
   }
@@ -488,7 +573,7 @@ const Views = (() => {
             ${b.roastLevel ? `<span class="pill pill-roast">${esc(b.roastLevel)}</span>` : ''}
             ${age ? `<span class="pill ${age.cls}">烘焙后第 ${age.days} 天 · ${age.label}</span>` : ''}
           </div>
-          ${b.flavorNotes?.length ? `<div class="bc-flavors">${b.flavorNotes.map((t) => `<span class="flavor-chip">${esc(t)}</span>`).join('')}</div>` : ''}
+          ${b.flavorNotes?.length ? `<div class="bc-flavors">${b.flavorNotes.map((t) => `<span class="flavor-chip"${flavorStyle(t)}>${esc(t)}</span>`).join('')}</div>` : ''}
           <div class="bc-progress"><div class="bc-progress-bar" style="width:${pct}%"></div></div>
           <div class="bc-remain">剩余 ${Math.round(num(b.remainingWeight))} / ${num(b.totalWeight)} g</div>
         </div>
@@ -674,7 +759,7 @@ const Views = (() => {
     const tagBox = $('#tag-box');
     const tagInput = $('#tag-input');
     function tagChip(t, i) {
-      return `<span class="tag-chip">${esc(t)}<button type="button" data-i="${i}">×</button></span>`;
+      return `<span class="tag-chip"${flavorStyle(t)}>${esc(t)}<button type="button" data-i="${i}">×</button></span>`;
     }
     function redrawTags() {
       $$('.tag-chip', tagBox).forEach((c) => c.remove());
@@ -1245,7 +1330,7 @@ const Views = (() => {
           <button type="button" class="btn btn-mini" id="btn-fw-step3"><i class="fa-solid fa-fan" data-emo="🎡"></i> 风味轮</button>
         </div>
         <div class="tag-box" id="flavor-box">
-          ${t.flavors.map((x, i) => `<span class="tag-chip">${esc(x)}<button type="button" data-i="${i}">×</button></span>`).join('')}
+          ${t.flavors.map((x, i) => `<span class="tag-chip"${flavorStyle(x)}>${esc(x)}<button type="button" data-i="${i}">×</button></span>`).join('')}
           <input id="flavor-input" placeholder="回车添加，如 柑橘">
         </div>
         <div class="f-label" style="margin:10px 0 6px;">心情</div>
@@ -1304,7 +1389,7 @@ const Views = (() => {
     const redrawFlavors = () => {
       $$('.tag-chip', fbox).forEach((c) => c.remove());
       t.flavors.forEach((x, i) =>
-        finput.insertAdjacentHTML('beforebegin', `<span class="tag-chip">${esc(x)}<button type="button" data-i="${i}">×</button></span>`));
+        finput.insertAdjacentHTML('beforebegin', `<span class="tag-chip"${flavorStyle(x)}>${esc(x)}<button type="button" data-i="${i}">×</button></span>`));
     };
     finput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
