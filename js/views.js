@@ -506,7 +506,7 @@ const Views = (() => {
           <div class="ec-main">
             <div class="ec-bean"><i class="fa-solid fa-store" data-emo="🏪"></i> ${esc(v.shopName)}</div>
             <div class="ec-meta">
-              <span class="pill pill-visit">${esc(v.drinkType || '其他')}</span>${esc(v.drinkName || '')}${esc(extra)}${v.price != null ? ` · ¥${v.price}` : ''}
+              <span class="pill pill-visit">${esc(v.drinkType || '其他')}</span>${esc(v.drinkName || '')}${v.temperature ? `（${esc(v.temperature)}）` : ''}${esc(extra)}${v.price != null ? ` · ¥${v.price}` : ''}
             </div>
           </div>
         </div>
@@ -1471,11 +1471,14 @@ const Views = (() => {
   };
   // 奶咖的意式豆种类选项（同样支持自定义输入）
   const ESPRESSO_BEANS = ['深烘拼配', '中烘拼配', '中浅烘拼配', 'SOE 单品', '低因拼配'];
+  // 温度选项：适用于全部饮品品类
+  const TEMPERATURES = ['热', '冰'];
 
   async function visitForm(id) {
     const editing = id ? await Store.visits.get(id) : null;
     let photo = editing?.photo || null;      // 压缩后的 base64 照片（饮品/菜单/店面）
     let drinkType = editing?.drinkType || '奶咖';
+    let temperature = editing?.temperature || null; // 热 | 冰 | null
     let mood = editing?.mood || '😀';
 
     view().innerHTML = `
@@ -1502,6 +1505,10 @@ const Views = (() => {
             <input name="drinkName" list="drink-list" value="${esc(editing?.drinkName || '')}" placeholder="如 Dirty / 燕麦拿铁 / 店家特调">
             <datalist id="drink-list"></datalist>
           </label>
+          <div class="f-label">温度</div>
+          <div class="drink-pills" id="temp-pills">
+            ${TEMPERATURES.map((t) => `<button type="button" class="drink-pill ${t === temperature ? 'sel' : ''}" data-t="${t}">${t}</button>`).join('')}
+          </div>
           <!-- 奶咖专属：意式豆种类 -->
           <div id="espresso-bean-sec" style="display:none;">
             <label class="f-label">意式豆种类（可选择，也可自定义）
@@ -1559,9 +1566,17 @@ const Views = (() => {
       const pill = e.target.closest('.drink-pill');
       if (!pill) return;
       drinkType = pill.dataset.t;
-      $$('.drink-pill').forEach((x) => x.classList.toggle('sel', x === pill));
+      $$('#drink-pills .drink-pill').forEach((x) => x.classList.toggle('sel', x === pill));
       updateSuggestions();
       syncDrinkSections();
+    });
+
+    // 温度选择：单选，再点一次取消（允许不记）
+    $('#temp-pills').addEventListener('click', (e) => {
+      const pill = e.target.closest('.drink-pill');
+      if (!pill) return;
+      temperature = temperature === pill.dataset.t ? null : pill.dataset.t;
+      $$('#temp-pills .drink-pill').forEach((x) => x.classList.toggle('sel', x.dataset.t === temperature));
     });
 
     // 评分滑块实时数值
@@ -1626,8 +1641,16 @@ const Views = (() => {
         const hit = DRINK_TYPES.find((t) => String(info.drinkType).includes(t));
         if (hit) {
           drinkType = hit;
-          $$('.drink-pill').forEach((x) => x.classList.toggle('sel', x.dataset.t === hit));
+          $$('#drink-pills .drink-pill').forEach((x) => x.classList.toggle('sel', x.dataset.t === hit));
           updateSuggestions();
+        }
+      }
+      // 温度识别回填（热/冰）
+      if (info.temperature) {
+        const hit = TEMPERATURES.find((t) => String(info.temperature).includes(t));
+        if (hit) {
+          temperature = hit;
+          $$('#temp-pills .drink-pill').forEach((x) => x.classList.toggle('sel', x.dataset.t === hit));
         }
       }
       syncDrinkSections(); // 按识别出的品类展开对应区域
@@ -1646,6 +1669,7 @@ const Views = (() => {
         location: orNull(form.elements.location.value),
         drinkType,
         drinkName: orNull(form.elements.drinkName.value),
+        temperature, // 热 | 冰 | null（全部品类通用）
         // 品类专属字段：仅对应品类下保存，其余置 null
         espressoBean: drinkType === '奶咖' ? orNull(form.elements.espressoBean.value) : null,
         beanOrigin: drinkType === '手冲' ? orNull(form.elements.beanOrigin.value) : null,
@@ -1913,12 +1937,46 @@ const Views = (() => {
   }
 
   /* ================= 5. 统计页 ================= */
+  /** 风味词典：16 大类折叠查阅完整感官描述（中国版风味轮 v1.0） */
+  function flavorDictHtml() {
+    const row = (label, v) => v
+      ? `<div class="dict-row"><span class="dict-label">${label}</span><span class="dict-val">${esc(v)}</span></div>`
+      : '';
+    return `
+      <div class="card chart-card">
+        <h3><i class="fa-solid fa-fan" data-emo="🎡"></i> 风味词典 · 中国版风味轮 v1.0</h3>
+        <div class="fw-dict">
+          ${FlavorWheel.CATEGORIES.map((cat) => `
+            <details class="dict-cat">
+              <summary style="background:${cat.color.bg};color:${cat.color.fg};border-color:${cat.color.bd}">
+                <span>${esc(cat.zh)}</span><span class="dict-count">${cat.items.length} 种</span>
+              </summary>
+              ${cat.items.map((name) => {
+                const d = FlavorWheel.DETAILS[name] || {};
+                return `
+                <details class="dict-item">
+                  <summary>${esc(name)}</summary>
+                  <div class="dict-body">
+                    ${row('风味解释', d.d)}
+                    ${row('味觉描述', d.t)}
+                    ${row('嗅觉描述', d.a)}
+                    ${row('触觉描述', d.h)}
+                    ${row('参考物', d.r)}
+                  </div>
+                </details>`;
+              }).join('')}
+            </details>`).join('')}
+        </div>
+      </div>`;
+  }
+
   async function stats() {
     const [entries, beans, preps] = await Promise.all([
       Store.entries.getAll(), Store.beans.getAll(), Store.preparations.getAll(),
     ]);
+    // 无数据时：统计区显示空状态，但风味词典始终可查
     if (!entries.length) {
-      view().innerHTML = `<section class="page"><h2 class="page-title">统计</h2>${emptyHtml('还没有数据，冲几杯后再来看吧', 'fa-chart-line', '📊')}</section>`;
+      view().innerHTML = `<section class="page"><h2 class="page-title">统计</h2>${emptyHtml('还没有数据，冲几杯后再来看吧', 'fa-chart-line', '📊')}${flavorDictHtml()}</section>`;
       return;
     }
     const beanMap = Object.fromEntries(beans.map((b) => [b.id, b]));
@@ -1970,6 +2028,7 @@ const Views = (() => {
         <div class="card chart-card"><h3>豆子杯数排行</h3><div class="chart-box"><canvas id="c-bar"></canvas></div></div>
         <div class="card chart-card"><h3>评分趋势</h3><div class="chart-box"><canvas id="c-line"></canvas></div></div>
         <div class="card chart-card"><h3>器具类型分布</h3><div class="chart-box"><canvas id="c-pie"></canvas></div></div>
+        ${flavorDictHtml()}
       </section>`;
 
     const COFFEE = '#6f4e37', ACCENT = '#c08552';

@@ -550,6 +550,32 @@ input[type=range]::-moz-range-thumb {
 .fw-item:active { transform: scale(.95); }
 .fw-item.sel { background: #f1e4d7; color: #8a5a34; border-color: var(--accent); font-weight: 700; }
 
+/* ---------------- 风味词典 ---------------- */
+.dict-cat { margin-bottom: 6px; }
+.dict-cat > summary {
+  cursor: pointer; list-style: none;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 12px; border-radius: 10px; border: 1px solid;
+  font-size: 14px; user-select: none;
+}
+.dict-cat > summary::-webkit-details-marker { display: none; }
+.dict-cat > summary::before { content: '▸ '; }
+.dict-cat[open] > summary::before { content: '▾ '; }
+.dict-count { font-size: 12px; opacity: .65; }
+.dict-item { margin: 4px 0 0 12px; }
+.dict-item > summary {
+  cursor: pointer; list-style: none;
+  padding: 7px 4px; font-size: 14px; color: var(--coffee);
+  border-bottom: 1px dashed var(--line); user-select: none;
+}
+.dict-item > summary::-webkit-details-marker { display: none; }
+.dict-item > summary::before { content: '▸ '; color: var(--accent); }
+.dict-item[open] > summary::before { content: '▾ '; }
+.dict-body { padding: 8px 4px 10px 12px; font-size: 13px; line-height: 1.9; }
+.dict-row { display: flex; gap: 10px; margin-bottom: 4px; }
+.dict-label { flex: 0 0 60px; color: var(--muted); font-size: 12px; padding-top: 2px; }
+.dict-val { flex: 1; }
+
 /* ---------------- 弹窗 / Toast ---------------- */
 .modal-mask {
   position: fixed; inset: 0; z-index: 100;

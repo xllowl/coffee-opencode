@@ -55,6 +55,7 @@ const LLM = (() => {
   "location": "地址/城市",
   "drinkName": "饮品名称（翻译为中文，可附原文）",
   "drinkType": "黑咖|奶咖|手冲|特调|其他",
+  "temperature": "热|冰（根据杯型/冰块/热气判断，无法确定填 null）",
   "price": 数字（单价，无法确定填 null）,
   "espressoBean": "意式豆种类：深烘拼配|中烘拼配|中浅烘拼配|SOE|低因拼配（仅奶咖类填写，菜单注明用豆时）",
   "beanOrigin": "产地国家（仅手冲类填写）",
