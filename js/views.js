@@ -1481,16 +1481,24 @@ const Views = (() => {
 
   /**
    * 从地图链接解析店铺信息（纯 URL 解析，不联网）
-   * 谷歌地图完整链接：/place/店名/... 与 @纬度,经度
+   * 谷歌地图完整链接：/place/店名,地址/... 与 @纬度,经度
+   * 注意：/place/ 段是「店名, 地址」整体，按逗号拆分：首段店名、其余地址
    */
   function parseLinkInfo(url) {
     const out = { shopName: null, location: null };
     try {
       const u = new URL(url);
       const m = u.pathname.match(/\/place\/([^/]+)/);
-      if (m) out.shopName = decodeURIComponent(m[1]).replace(/\+/g, ' ');
+      if (m) {
+        // 先按谷歌惯例把 + 还原为空格，再解码 %XX
+        const seg = decodeURIComponent(m[1].replace(/\+/g, ' '));
+        const parts = seg.split(',').map((s) => s.trim()).filter(Boolean);
+        out.shopName = parts[0] || null;
+        if (parts.length > 1) out.location = parts.slice(1).join(', ');
+      }
+      // 地址缺失时回退到 @纬度,经度 坐标
       const c = (u.pathname + u.search).match(/@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/);
-      if (c) out.location = `${c[1]},${c[2]}`;
+      if (c && !out.location) out.location = `${c[1]},${c[2]}`;
     } catch { /* 非合法 URL 时返回空 */ }
     return out;
   }
