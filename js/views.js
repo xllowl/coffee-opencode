@@ -664,6 +664,11 @@ const Views = (() => {
       const setVal = (name, v) => { if (v != null && v !== '') f.elements[name].value = v; };
       setVal('name', info.name);
       setVal('origin', info.origin);
+      // 产地命中已知国家时，名称前自动添加国旗 emoji（幂等：已有同国旗不重复添加）
+      if (info.name && info.origin) {
+        const flag = WorldMap.flagOf(info.origin);
+        if (flag && !String(info.name).startsWith(flag)) f.elements.name.value = `${flag} ${info.name}`;
+      }
       setVal('region', info.region);
       setVal('variety', info.variety);
       setVal('altitude', info.altitude);
@@ -1433,6 +1438,11 @@ const Views = (() => {
       setVal('shopName', info.shopName);
       setVal('location', info.location);
       setVal('drinkName', info.drinkName);
+      // 识别出手冲豆产地时，饮品名称前自动添加国旗 emoji（幂等）
+      if (info.drinkName && info.beanOrigin) {
+        const flag = WorldMap.flagOf(info.beanOrigin);
+        if (flag && !String(info.drinkName).startsWith(flag)) form.elements.drinkName.value = `${flag} ${info.drinkName}`;
+      }
       setVal('notes', info.notes);
       setVal('espressoBean', info.espressoBean);       // 奶咖：意式豆种类
       setVal('beanOrigin', info.beanOrigin);           // 手冲：产地
@@ -1494,7 +1504,19 @@ const Views = (() => {
   }
 
   /* ================= 5b. 世界产地地图 ================= */
-  let mapState = null; // { groups, bubbles, sel }：聚合结果 / 气泡位置（点击命中用）/ 选中国家
+  let mapState = null; // { groups, bubbles, sel, region }：聚合 / 气泡位置 / 选中国家 / 当前产区视图
+
+  /** 当前视野内的国家组（产区视图时过滤） */
+  const visibleGroups = () => mapState.region === 'all'
+    ? mapState.groups
+    : mapState.groups.filter((g) => g.country.region === mapState.region);
+
+  /** 当前视野经纬度边界 */
+  function currentBounds() {
+    if (mapState.region === 'all') return { lngMin: -180, lngMax: 180, latMin: -60, latMax: 84 };
+    const r = WorldMap.REGIONS.find((x) => x.key === mapState.region);
+    return { lngMin: r.lng[0], lngMax: r.lng[1], latMin: r.lat[0], latMax: r.lat[1] };
+  }
 
   async function mapView() {
     const [beans, entries] = await Promise.all([Store.beans.getAll(), Store.entries.getAll()]);
@@ -1519,7 +1541,7 @@ const Views = (() => {
       g.beans.push({ bean: b, cups: st.cups, avg: st.n ? st.sum / st.n : null });
     });
     const groups = Object.values(agg).sort((a, b) => b.cups - a.cups);
-    mapState = { groups, bubbles: [], sel: groups[0]?.country.key || null };
+    mapState = { groups, bubbles: [], sel: groups[0]?.country.key || null, region: 'all' };
 
     view().innerHTML = `
       <section class="page">
@@ -1530,20 +1552,36 @@ const Views = (() => {
           <div class="card stat-card"><div class="sc-num">${entries.length}</div><div class="sc-label">总杯数</div></div>
         </div>
         ${groups.length ? `
+        <div class="region-tabs" id="region-tabs">
+          <span class="region-label">产区视图</span>
+          <button class="map-chip sel" data-r="all">全部</button>
+          ${WorldMap.REGIONS.map((r) => `<button class="map-chip" data-r="${r.key}">${r.zh}</button>`).join('')}
+        </div>
         <div class="card map-card">
           <canvas id="world-map"></canvas>
           <div class="map-legend"><span class="dot-demo"></span>陆地　<span class="bubble-demo"></span>气泡大小 = 杯数，点击看明细</div>
         </div>
-        <div class="map-chips" id="map-chips">
-          ${groups.map((g) => `<button class="map-chip ${g.country.key === mapState.sel ? 'sel' : ''}" data-key="${g.country.key}">${esc(g.country.zh)} ${g.cups}杯</button>`).join('')}
-        </div>
+        <div class="map-chips" id="map-chips"></div>
         <div id="map-detail"></div>` : emptyHtml('还没有带产地信息的豆子，去豆库补充产地国家吧', 'fa-earth-americas', '🌍')}
         ${unmatched.length ? `<div class="map-unmatched">未识别产地的豆子：${unmatched.map((b) => esc(b.name)).join('、')}，可在豆库编辑补充「产地国家」</div>` : ''}
       </section>`;
 
     if (!groups.length) return;
+    renderMapChips();
     drawWorldMap();
     renderMapDetail();
+
+    // 产区视图切换：全部 / 非洲 / 中美与加勒比 / 南美洲 / 亚太
+    $('#region-tabs').addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-r]');
+      if (!btn) return;
+      mapState.region = btn.dataset.r;
+      $$('#region-tabs .map-chip').forEach((x) => x.classList.toggle('sel', x === btn));
+      mapState.sel = visibleGroups()[0]?.country.key || null; // 切换后选中视野内第一个国家
+      renderMapChips();
+      drawWorldMap();
+      renderMapDetail();
+    });
 
     // 国家胶囊快速定位
     $('#map-chips').addEventListener('click', (e) => {
@@ -1575,14 +1613,28 @@ const Views = (() => {
     window.addEventListener('resize', mapResize);
   }
 
-  /** Canvas 绘制：陆地点阵 + 产国气泡 */
+  /** 国家胶囊列表（跟随产区视图过滤） */
+  function renderMapChips() {
+    const box = $('#map-chips');
+    if (!box || !mapState) return;
+    const vis = visibleGroups();
+    box.innerHTML = vis.length
+      ? vis.map((g) => `<button class="map-chip ${g.country.key === mapState.sel ? 'sel' : ''}" data-key="${g.country.key}">${esc(g.country.zh)} ${g.cups}杯</button>`).join('')
+      : '<div class="map-unmatched">该产区暂无记录</div>';
+  }
+
+  /** Canvas 绘制：陆地点阵 + 产国气泡（支持产区放大视图） */
   function drawWorldMap() {
     const canvas = $('#world-map');
     if (!canvas || !mapState) return;
+    const isRegion = mapState.region !== 'all';
+    const b = currentBounds();
     const dpr = window.devicePixelRatio || 1;
     const w = canvas.clientWidth;
     if (!w) return;
-    const h = Math.round((w * WorldMap.H) / WorldMap.W);
+    // 视野内的栅格行列数决定画布高宽比：产区视图横向被拉满，点距更大更细节
+    const cols = (b.lngMax - b.lngMin) / 3, rows = (b.latMax - b.latMin) / 3;
+    const h = Math.round((w * rows) / cols);
     canvas.style.height = h + 'px';
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
@@ -1590,33 +1642,47 @@ const Views = (() => {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
 
-    // 1) 陆地点阵（纸张色小圆点）
-    const dx = w / WorldMap.W, dy = h / WorldMap.H;
-    const dotR = Math.max(0.6, Math.min(dx, dy) * 0.36);
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const project = (lat, lng) => ({
+      x: ((lng - b.lngMin) / (b.lngMax - b.lngMin)) * w,
+      y: ((b.latMax - lat) / (b.latMax - b.latMin)) * h,
+    });
+
+    // 1) 陆地点阵：只画视野内的格子（纸张色小圆点）
+    const dx = w / cols, dy = h / rows;
+    const dotR = Math.max(0.6, Math.min(dx, dy) * 0.38);
     ctx.fillStyle = '#dcc9ac';
     for (let row = 0; row < WorldMap.H; row++) {
+      const lat = 84 - (row + 0.5) * 3;
+      if (lat < b.latMin || lat > b.latMax) continue;
       const line = WorldMap.GRID[row];
       for (let col = 0; col < WorldMap.W; col++) {
-        if (line[col] === '1') {
-          ctx.beginPath();
-          ctx.arc((col + 0.5) * dx, (row + 0.5) * dy, dotR, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        if (line[col] !== '1') continue;
+        const lng = -180 + (col + 0.5) * 3;
+        if (lng < b.lngMin || lng > b.lngMax) continue;
+        const p = project(lat, lng);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
 
-    // 2) 产国气泡（杯数开平方映射半径，避免悬殊过大）
+    // 2) 产国气泡（缩小尺寸：世界视图约原先一半；杯数开平方映射半径）
     mapState.bubbles = [];
-    const maxCups = Math.max(1, ...mapState.groups.map((g) => g.cups));
-    mapState.groups.forEach((g) => {
-      const { x, y } = WorldMap.project(g.country.lat, g.country.lng, w, h);
+    const groups = visibleGroups();
+    const maxCups = Math.max(1, ...groups.map((g) => g.cups));
+    groups.forEach((g) => {
+      const pr = project(g.country.lat, g.country.lng);
+      // 产区视图下越界国家（如美国/澳洲质心）钳制到画布边缘
+      const x = isRegion ? clamp(pr.x, 12, w - 12) : pr.x;
+      const y = isRegion ? clamp(pr.y, 12, h - 12) : pr.y;
       const isSel = g.country.key === mapState.sel;
       const br = g.cups > 0
-        ? Math.min(7 + Math.sqrt(g.cups / maxCups) * (w * 0.05), w * 0.075)
-        : 4; // 有豆未冲：空心小点
+        ? Math.min(5 + Math.sqrt(g.cups / maxCups) * (isRegion ? 9 : w * 0.028), isRegion ? 18 : w * 0.05)
+        : 3.5; // 有豆未冲：空心小点
       mapState.bubbles.push({ key: g.country.key, x, y, r: br });
       if (isSel) { // 选中高亮光环
-        ctx.beginPath(); ctx.arc(x, y, br + 4, 0, Math.PI * 2);
+        ctx.beginPath(); ctx.arc(x, y, br + 3.5, 0, Math.PI * 2);
         ctx.strokeStyle = '#c08552'; ctx.lineWidth = 2; ctx.stroke();
       }
       ctx.beginPath(); ctx.arc(x, y, br, 0, Math.PI * 2);
@@ -1633,6 +1699,22 @@ const Views = (() => {
       } else {
         ctx.fillStyle = '#fffdf8'; ctx.fill();
         ctx.lineWidth = 1.5; ctx.strokeStyle = '#6f4e37'; ctx.stroke();
+      }
+      // 3) 产区放大视图：气泡旁标注国名，信息更细节
+      if (isRegion) {
+        ctx.fillStyle = '#3e2f25';
+        ctx.font = '11px "LXGW Wenkai", Georgia, serif';
+        ctx.textBaseline = 'middle';
+        const label = g.country.zh;
+        const tw = ctx.measureText(label).width;
+        if (x + br + 4 + tw > w) {
+          // 右侧放不下面向左侧标注，避免文字被裁切
+          ctx.textAlign = 'right';
+          ctx.fillText(label, x - br - 4, y);
+        } else {
+          ctx.textAlign = 'left';
+          ctx.fillText(label, x + br + 4, y);
+        }
       }
     });
   }

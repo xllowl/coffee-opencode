@@ -473,6 +473,8 @@ input[type=range]::-moz-range-thumb {
 }
 .dot-demo { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #dcc9ac; }
 .bubble-demo { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--coffee); border: 1.5px solid var(--card); box-shadow: 0 0 0 1px var(--coffee); }
+.region-tabs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.region-label { font-size: 13px; color: var(--muted); margin-right: 2px; }
 .map-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .map-chip {
   border: 1px solid var(--line); background: var(--card); color: var(--ink);

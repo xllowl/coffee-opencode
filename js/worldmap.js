@@ -60,54 +60,62 @@ const WorldMap = (() => {
 
   // 咖啡产国质心坐标 + 中英文别名（用于匹配 bean.origin；匹配时按别名长度从长到短）
   const COUNTRIES = [
-    { key: 'ethiopia',    zh: '埃塞俄比亚', names: ['埃塞俄比亚', 'ethiopia'],           lat: 9.1,   lng: 40.5 },
-    { key: 'kenya',       zh: '肯尼亚',     names: ['肯尼亚', 'kenya'],                  lat: 0.2,   lng: 37.9 },
-    { key: 'tanzania',    zh: '坦桑尼亚',   names: ['坦桑尼亚', 'tanzania'],             lat: -6.4,  lng: 34.9 },
-    { key: 'uganda',      zh: '乌干达',     names: ['乌干达', 'uganda'],                 lat: 1.4,   lng: 32.4 },
-    { key: 'rwanda',      zh: '卢旺达',     names: ['卢旺达', 'rwanda'],                 lat: -1.9,  lng: 29.9 },
-    { key: 'burundi',     zh: '布隆迪',     names: ['布隆迪', 'burundi'],                lat: -3.4,  lng: 29.9 },
-    { key: 'congo',       zh: '刚果(金)',   names: ['刚果民主共和国', '刚果(金)', '刚果', 'congo'], lat: -4.0, lng: 21.7 },
-    { key: 'yemen',       zh: '也门',       names: ['也门', 'yemen'],                    lat: 15.6,  lng: 48.5 },
-    { key: 'colombia',    zh: '哥伦比亚',   names: ['哥伦比亚', 'colombia'],             lat: 4.6,   lng: -74.1 },
-    { key: 'brazil',      zh: '巴西',       names: ['巴西', 'brazil'],                   lat: -10.8, lng: -52.9 },
-    { key: 'peru',        zh: '秘鲁',       names: ['秘鲁', 'peru'],                     lat: -9.2,  lng: -75.0 },
-    { key: 'ecuador',     zh: '厄瓜多尔',   names: ['厄瓜多尔', 'ecuador'],              lat: -1.8,  lng: -78.2 },
-    { key: 'bolivia',     zh: '玻利维亚',   names: ['玻利维亚', 'bolivia'],              lat: -16.3, lng: -63.6 },
-    { key: 'venezuela',   zh: '委内瑞拉',   names: ['委内瑞拉', 'venezuela'],            lat: 6.4,   lng: -66.6 },
-    { key: 'panama',      zh: '巴拿马',     names: ['巴拿马', 'panama'],                 lat: 8.5,   lng: -80.8 },
-    { key: 'costarica',   zh: '哥斯达黎加', names: ['哥斯达黎加', 'costa rica'],         lat: 9.7,   lng: -83.8 },
-    { key: 'guatemala',   zh: '危地马拉',   names: ['危地马拉', 'guatemala'],            lat: 15.8,  lng: -90.2 },
-    { key: 'honduras',    zh: '洪都拉斯',   names: ['洪都拉斯', 'honduras'],             lat: 15.2,  lng: -86.3 },
-    { key: 'nicaragua',   zh: '尼加拉瓜',   names: ['尼加拉瓜', 'nicaragua'],            lat: 12.9,  lng: -85.2 },
-    { key: 'elsalvador',  zh: '萨尔瓦多',   names: ['萨尔瓦多', 'el salvador'],          lat: 13.8,  lng: -88.9 },
-    { key: 'mexico',      zh: '墨西哥',     names: ['墨西哥', 'mexico'],                 lat: 23.6,  lng: -102.6 },
-    { key: 'jamaica',     zh: '牙买加',     names: ['牙买加', 'jamaica'],                lat: 18.1,  lng: -77.3 },
-    { key: 'cuba',        zh: '古巴',       names: ['古巴', 'cuba'],                     lat: 21.5,  lng: -79.5 },
-    { key: 'dominican',   zh: '多米尼加',   names: ['多米尼加', 'dominican'],            lat: 18.7,  lng: -70.2 },
-    { key: 'puertorico',  zh: '波多黎各',   names: ['波多黎各', 'puerto rico'],          lat: 18.2,  lng: -66.5 },
-    { key: 'hawaii',      zh: '夏威夷',     names: ['夏威夷', 'hawaii'],                 lat: 19.6,  lng: -155.5 },
-    { key: 'usa',         zh: '美国',       names: ['美国', 'united states', 'usa'],     lat: 39.8,  lng: -98.6 },
-    { key: 'yunnan',      zh: '中国云南',   names: ['云南', 'yunnan'],                   lat: 24.9,  lng: 101.5 },
-    { key: 'china',       zh: '中国',       names: ['中国', 'china'],                    lat: 35.0,  lng: 103.0 },
-    { key: 'india',       zh: '印度',       names: ['印度', 'india'],                    lat: 21.0,  lng: 78.0 },
-    { key: 'indonesia',   zh: '印度尼西亚', names: ['印度尼西亚', '印尼', 'indonesia', 'sumatra', 'java', 'sulawesi'], lat: -2.5, lng: 118.0 },
-    { key: 'vietnam',     zh: '越南',       names: ['越南', 'vietnam'],                  lat: 14.1,  lng: 108.3 },
-    { key: 'thailand',    zh: '泰国',       names: ['泰国', 'thailand'],                 lat: 15.9,  lng: 101.0 },
-    { key: 'laos',        zh: '老挝',       names: ['老挝', 'laos'],                     lat: 18.2,  lng: 103.8 },
-    { key: 'myanmar',     zh: '缅甸',       names: ['缅甸', 'myanmar'],                  lat: 21.9,  lng: 96.0 },
-    { key: 'png',         zh: '巴布亚新几内亚', names: ['巴布亚新几内亚', 'papua new guinea', '巴布亚'], lat: -6.3, lng: 145.0 },
-    { key: 'timor',       zh: '东帝汶',     names: ['东帝汶', 'timor'],                  lat: -8.8,  lng: 125.7 },
-    { key: 'philippines', zh: '菲律宾',     names: ['菲律宾', 'philippines'],            lat: 12.9,  lng: 121.8 },
-    { key: 'nepal',       zh: '尼泊尔',     names: ['尼泊尔', 'nepal'],                  lat: 28.4,  lng: 84.1 },
-    { key: 'srilanka',    zh: '斯里兰卡',   names: ['斯里兰卡', 'sri lanka'],            lat: 7.9,   lng: 80.8 },
-    { key: 'cameroon',    zh: '喀麦隆',     names: ['喀麦隆', 'cameroon'],               lat: 6.6,   lng: 12.4 },
-    { key: 'ivory',       zh: '科特迪瓦',   names: ['科特迪瓦', '象牙海岸', 'ivory'],    lat: 7.5,   lng: -5.6 },
-    { key: 'nigeria',     zh: '尼日利亚',   names: ['尼日利亚', 'nigeria'],              lat: 9.1,   lng: 8.7 },
-    { key: 'madagascar',  zh: '马达加斯加', names: ['马达加斯加', 'madagascar'],         lat: -19.4, lng: 46.7 },
-    { key: 'malawi',      zh: '马拉维',     names: ['马拉维', 'malawi'],                 lat: -13.3, lng: 34.3 },
-    { key: 'australia',   zh: '澳大利亚',   names: ['澳大利亚', '澳洲', 'australia'],    lat: -25.3, lng: 133.8 },
-    { key: 'angola',      zh: '安哥拉',     names: ['安哥拉', 'angola'],                 lat: -11.2, lng: 17.9 },
-    { key: 'zambia',      zh: '赞比亚',     names: ['赞比亚', 'zambia'],                 lat: -14.5, lng: 27.8 },
+    { key: 'ethiopia', region: 'africa', cc: 'ET',    zh: '埃塞俄比亚', names: ['埃塞俄比亚', 'ethiopia'],           lat: 9.1,   lng: 40.5 },
+    { key: 'kenya', region: 'africa', cc: 'KE',       zh: '肯尼亚',     names: ['肯尼亚', 'kenya'],                  lat: 0.2,   lng: 37.9 },
+    { key: 'tanzania', region: 'africa', cc: 'TZ',    zh: '坦桑尼亚',   names: ['坦桑尼亚', 'tanzania'],             lat: -6.4,  lng: 34.9 },
+    { key: 'uganda', region: 'africa', cc: 'UG',      zh: '乌干达',     names: ['乌干达', 'uganda'],                 lat: 1.4,   lng: 32.4 },
+    { key: 'rwanda', region: 'africa', cc: 'RW',      zh: '卢旺达',     names: ['卢旺达', 'rwanda'],                 lat: -1.9,  lng: 29.9 },
+    { key: 'burundi', region: 'africa', cc: 'BI',     zh: '布隆迪',     names: ['布隆迪', 'burundi'],                lat: -3.4,  lng: 29.9 },
+    { key: 'congo', region: 'africa', cc: 'CD',       zh: '刚果(金)',   names: ['刚果民主共和国', '刚果(金)', '刚果', 'congo'], lat: -4.0, lng: 21.7 },
+    { key: 'yemen', region: 'africa', cc: 'YE',       zh: '也门',       names: ['也门', 'yemen'],                    lat: 15.6,  lng: 48.5 },
+    { key: 'colombia', region: 'samerica', cc: 'CO',    zh: '哥伦比亚',   names: ['哥伦比亚', 'colombia'],             lat: 4.6,   lng: -74.1 },
+    { key: 'brazil', region: 'samerica', cc: 'BR',      zh: '巴西',       names: ['巴西', 'brazil'],                   lat: -10.8, lng: -52.9 },
+    { key: 'peru', region: 'samerica', cc: 'PE',        zh: '秘鲁',       names: ['秘鲁', 'peru'],                     lat: -9.2,  lng: -75.0 },
+    { key: 'ecuador', region: 'samerica', cc: 'EC',     zh: '厄瓜多尔',   names: ['厄瓜多尔', 'ecuador'],              lat: -1.8,  lng: -78.2 },
+    { key: 'bolivia', region: 'samerica', cc: 'BO',     zh: '玻利维亚',   names: ['玻利维亚', 'bolivia'],              lat: -16.3, lng: -63.6 },
+    { key: 'venezuela', region: 'samerica', cc: 'VE',   zh: '委内瑞拉',   names: ['委内瑞拉', 'venezuela'],            lat: 6.4,   lng: -66.6 },
+    { key: 'panama', region: 'namerica', cc: 'PA',      zh: '巴拿马',     names: ['巴拿马', 'panama'],                 lat: 8.5,   lng: -80.8 },
+    { key: 'costarica', region: 'namerica', cc: 'CR',   zh: '哥斯达黎加', names: ['哥斯达黎加', 'costa rica'],         lat: 9.7,   lng: -83.8 },
+    { key: 'guatemala', region: 'namerica', cc: 'GT',   zh: '危地马拉',   names: ['危地马拉', 'guatemala'],            lat: 15.8,  lng: -90.2 },
+    { key: 'honduras', region: 'namerica', cc: 'HN',    zh: '洪都拉斯',   names: ['洪都拉斯', 'honduras'],             lat: 15.2,  lng: -86.3 },
+    { key: 'nicaragua', region: 'namerica', cc: 'NI',   zh: '尼加拉瓜',   names: ['尼加拉瓜', 'nicaragua'],            lat: 12.9,  lng: -85.2 },
+    { key: 'elsalvador', region: 'namerica', cc: 'SV',  zh: '萨尔瓦多',   names: ['萨尔瓦多', 'el salvador'],          lat: 13.8,  lng: -88.9 },
+    { key: 'mexico', region: 'namerica', cc: 'MX',      zh: '墨西哥',     names: ['墨西哥', 'mexico'],                 lat: 23.6,  lng: -102.6 },
+    { key: 'jamaica', region: 'namerica', cc: 'JM',     zh: '牙买加',     names: ['牙买加', 'jamaica'],                lat: 18.1,  lng: -77.3 },
+    { key: 'cuba', region: 'namerica', cc: 'CU',        zh: '古巴',       names: ['古巴', 'cuba'],                     lat: 21.5,  lng: -79.5 },
+    { key: 'dominican', region: 'namerica', cc: 'DO',   zh: '多米尼加',   names: ['多米尼加', 'dominican'],            lat: 18.7,  lng: -70.2 },
+    { key: 'puertorico', region: 'namerica', cc: 'PR',  zh: '波多黎各',   names: ['波多黎各', 'puerto rico'],          lat: 18.2,  lng: -66.5 },
+    { key: 'hawaii', region: 'asia', cc: 'US',      zh: '夏威夷',     names: ['夏威夷', 'hawaii'],                 lat: 19.6,  lng: -155.5 },
+    { key: 'usa', region: 'namerica', cc: 'US',         zh: '美国',       names: ['美国', 'united states', 'usa'],     lat: 39.8,  lng: -98.6 },
+    { key: 'yunnan', region: 'asia', cc: 'CN',      zh: '中国云南',   names: ['云南', 'yunnan'],                   lat: 24.9,  lng: 101.5 },
+    { key: 'china', region: 'asia', cc: 'CN',       zh: '中国',       names: ['中国', 'china'],                    lat: 35.0,  lng: 103.0 },
+    { key: 'india', region: 'asia', cc: 'IN',       zh: '印度',       names: ['印度', 'india'],                    lat: 21.0,  lng: 78.0 },
+    { key: 'indonesia', region: 'asia', cc: 'ID',   zh: '印度尼西亚', names: ['印度尼西亚', '印尼', 'indonesia', 'sumatra', 'java', 'sulawesi'], lat: -2.5, lng: 118.0 },
+    { key: 'vietnam', region: 'asia', cc: 'VN',     zh: '越南',       names: ['越南', 'vietnam'],                  lat: 14.1,  lng: 108.3 },
+    { key: 'thailand', region: 'asia', cc: 'TH',    zh: '泰国',       names: ['泰国', 'thailand'],                 lat: 15.9,  lng: 101.0 },
+    { key: 'laos', region: 'asia', cc: 'LA',        zh: '老挝',       names: ['老挝', 'laos'],                     lat: 18.2,  lng: 103.8 },
+    { key: 'myanmar', region: 'asia', cc: 'MM',     zh: '缅甸',       names: ['缅甸', 'myanmar'],                  lat: 21.9,  lng: 96.0 },
+    { key: 'png', region: 'asia', cc: 'PG',         zh: '巴布亚新几内亚', names: ['巴布亚新几内亚', 'papua new guinea', '巴布亚'], lat: -6.3, lng: 145.0 },
+    { key: 'timor', region: 'asia', cc: 'TL',       zh: '东帝汶',     names: ['东帝汶', 'timor'],                  lat: -8.8,  lng: 125.7 },
+    { key: 'philippines', region: 'asia', cc: 'PH', zh: '菲律宾',     names: ['菲律宾', 'philippines'],            lat: 12.9,  lng: 121.8 },
+    { key: 'nepal', region: 'asia', cc: 'NP',       zh: '尼泊尔',     names: ['尼泊尔', 'nepal'],                  lat: 28.4,  lng: 84.1 },
+    { key: 'srilanka', region: 'asia', cc: 'LK',    zh: '斯里兰卡',   names: ['斯里兰卡', 'sri lanka'],            lat: 7.9,   lng: 80.8 },
+    { key: 'cameroon', region: 'africa', cc: 'CM',    zh: '喀麦隆',     names: ['喀麦隆', 'cameroon'],               lat: 6.6,   lng: 12.4 },
+    { key: 'ivory', region: 'africa', cc: 'CI',       zh: '科特迪瓦',   names: ['科特迪瓦', '象牙海岸', 'ivory'],    lat: 7.5,   lng: -5.6 },
+    { key: 'nigeria', region: 'africa', cc: 'NG',     zh: '尼日利亚',   names: ['尼日利亚', 'nigeria'],              lat: 9.1,   lng: 8.7 },
+    { key: 'madagascar', region: 'africa', cc: 'MG',  zh: '马达加斯加', names: ['马达加斯加', 'madagascar'],         lat: -19.4, lng: 46.7 },
+    { key: 'malawi', region: 'africa', cc: 'MW',      zh: '马拉维',     names: ['马拉维', 'malawi'],                 lat: -13.3, lng: 34.3 },
+    { key: 'australia', region: 'asia', cc: 'AU',   zh: '澳大利亚',   names: ['澳大利亚', '澳洲', 'australia'],    lat: -25.3, lng: 133.8 },
+    { key: 'angola', region: 'africa', cc: 'AO',      zh: '安哥拉',     names: ['安哥拉', 'angola'],                 lat: -11.2, lng: 17.9 },
+    { key: 'zambia', region: 'africa', cc: 'ZM',      zh: '赞比亚',     names: ['赞比亚', 'zambia'],                 lat: -14.5, lng: 27.8 },
+  ];
+
+  // 常规咖啡产区分类（用于产区放大视图；经纬度边界对齐 3° 栅格）
+  const REGIONS = [
+    { key: 'africa',   zh: '非洲',         lng: [-18, 54],   lat: [-36, 24] },
+    { key: 'namerica', zh: '中美与加勒比', lng: [-120, -54], lat: [3, 33] },
+    { key: 'samerica', zh: '南美洲',       lng: [-84, -30],  lat: [-36, 18] },
+    { key: 'asia',     zh: '亚太',         lng: [87, 180],   lat: [-27, 33] },
   ];
 
   // 扁平化别名表：按别名长度降序，保证「云南」先于「中国」、「夏威夷」先于「美国」命中
@@ -128,5 +136,17 @@ const WorldMap = (() => {
     return { x: ((lng + 180) / 360) * w, y: ((LAT_TOP - lat) / (LAT_TOP - LAT_BOT)) * h };
   }
 
-  return { W, H, GRID, COUNTRIES, match, project };
+  /** 两位国家代码 → 国旗 emoji（区域指示符号拼接） */
+  function flag(country) {
+    if (!country?.cc) return '';
+    return String.fromCodePoint(...[...country.cc].map((ch) => 0x1F1E6 + ch.charCodeAt(0) - 65));
+  }
+
+  /** origin 字符串 → 国旗 emoji；匹配不到返回 '' */
+  function flagOf(origin) {
+    const c = match(origin);
+    return c ? flag(c) : '';
+  }
+
+  return { W, H, GRID, COUNTRIES, REGIONS, match, project, flag, flagOf };
 })();
