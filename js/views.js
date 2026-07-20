@@ -146,26 +146,36 @@ const Views = (() => {
 
     const mask = document.createElement('div');
     mask.className = 'fw-mask';
-    const render = () => {
+    // 骨架只创建一次，后续仅更新差异部分，避免整体重建造成闪烁
+    mask.innerHTML = `
+      <div class="fw-sheet">
+        <div class="fw-head">
+          <span class="fw-title"></span>
+          <button type="button" class="btn btn-mini btn-primary" data-act="done">完成</button>
+        </div>
+        <div class="fw-wheel"><canvas id="fw-canvas"></canvas></div>
+        <div class="fw-items"></div>
+      </div>`;
+
+    /** 更新标题 + 风味芯片列表（不触碰 canvas） */
+    function updateContent() {
       const cat = FlavorWheel.CATEGORIES[curIdx];
       const cc = cat.color;
-      mask.innerHTML = `
-        <div class="fw-sheet">
-          <div class="fw-head">
-            <span class="fw-title"><i class="fa-solid fa-fan" data-emo="🎡"></i> 风味轮 · ${esc(cat.zh)}</span>
-            <button type="button" class="btn btn-mini btn-primary" data-act="done">完成</button>
-          </div>
-          <div class="fw-wheel"><canvas id="fw-canvas"></canvas></div>
-          <div class="fw-items">
-            ${cat.items.map((it) => {
-              const on = tags.includes(it);
-              return `<button type="button" class="fw-item ${on ? 'sel' : ''}" data-f="${esc(it)}"${on ? ` style="background:${cc.bg};border-color:${cc.bd};color:${cc.fg};font-weight:700;"` : ''}>${esc(it)}</button>`;
-            }).join('')}
-          </div>
-        </div>`;
-      Icons.fix(mask); // FA 降级模式下兜底
-      drawFlavorWheel();
-    };
+      mask.querySelector('.fw-title').innerHTML =
+        `<i class="fa-solid fa-fan" data-emo="🎡"></i> 风味轮 · ${esc(cat.zh)}`;
+      Icons.fix(mask.querySelector('.fw-title'));
+      mask.querySelector('.fw-items').innerHTML = cat.items.map((it) => {
+        const on = tags.includes(it);
+        return `<button type="button" class="fw-item ${on ? 'sel' : ''}" data-f="${esc(it)}"${on ? ` style="background:${cc.bg};border-color:${cc.bd};color:${cc.fg};font-weight:700;"` : ''}>${esc(it)}</button>`;
+      }).join('');
+    }
+
+    /** 切换大类：原地重绘轮盘 + 更新芯片 */
+    function switchCategory(i) {
+      curIdx = i;
+      drawFlavorWheel(); // 同一 canvas 上 clearRect 重绘，无闪烁
+      updateContent();
+    }
 
     /** Canvas 环形轮盘：16 扇区按大类配色，选中扇区高亮，中心显示当前大类 */
     function drawFlavorWheel() {
@@ -229,7 +239,7 @@ const Views = (() => {
     }
 
     document.body.appendChild(mask); // 先挂载再渲染，否则 canvas 无布局尺寸
-    render();
+    switchCategory(curIdx);
     mask.addEventListener('click', (e) => {
       if (e.target === mask || e.target.dataset.act === 'done') { mask.remove(); onChange(); return; }
       // 点击轮盘扇区 → 切换大类
@@ -242,18 +252,21 @@ const Views = (() => {
         if (r >= rIn && r <= rOut) {
           let a = Math.atan2(y, x) + Math.PI / 2;
           if (a < 0) a += Math.PI * 2;
-          curIdx = Math.min(FlavorWheel.CATEGORIES.length - 1, Math.floor(a / ((Math.PI * 2) / FlavorWheel.CATEGORIES.length)));
-          render();
+          const idx = Math.min(FlavorWheel.CATEGORIES.length - 1, Math.floor(a / ((Math.PI * 2) / FlavorWheel.CATEGORIES.length)));
+          if (idx !== curIdx) switchCategory(idx);
         }
         return;
       }
-      // 点击风味芯片 → 切换选中
+      // 点击风味芯片 → 只更新该芯片样式，不重建列表
       const f = e.target.closest('.fw-item');
       if (f) {
         const v = f.dataset.f;
         const i = tags.indexOf(v);
         if (i >= 0) tags.splice(i, 1); else tags.push(v); // 点选切换，自动去重
-        render(); // 重绘以更新芯片配色
+        const on = tags.includes(v);
+        const cc = FlavorWheel.CATEGORIES[curIdx].color;
+        f.classList.toggle('sel', on);
+        f.style.cssText = on ? `background:${cc.bg};border-color:${cc.bd};color:${cc.fg};font-weight:700;` : '';
         onChange();
       }
     });
