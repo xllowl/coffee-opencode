@@ -484,7 +484,7 @@ const Views = (() => {
       </div>`;
   }
 
-  /** 探店卡片：店名 + 品种胶囊 + 品类专属信息 + 评分/价格 */
+  /** 探店卡片：店名 + 品种胶囊 + 品类专属信息 + 点评/商圈 + 评分/价格 */
   function visitCard(v) {
     const notes = (v.notes || '').trim();
     // 奶咖显示意式豆种类；手冲显示 产地+豆种+处理法
@@ -494,6 +494,7 @@ const Views = (() => {
       const beanStr = [v.beanOrigin, v.beanVariety, v.beanProcess].filter(Boolean).join(' ');
       if (beanStr) extra = ` · ${beanStr}`;
     }
+    const locLine = [v.area, v.location].filter(Boolean).join(' · '); // 商圈 · 详细地址
     return `
       <div class="swipe-wrap" data-kind="visit" data-id="${v.id}">
       <div class="swipe-actions"><button type="button" class="swipe-del"><i class="fa-solid fa-trash-can" data-emo="🗑"></i>删除</button></div>
@@ -509,10 +510,13 @@ const Views = (() => {
             <div class="ec-meta">
               <span class="pill pill-visit">${esc(v.drinkType || '其他')}</span>${esc(v.drinkName || '')}${v.temperature ? `（${esc(v.temperature)}）` : ''}${esc(extra)}${v.price != null ? ` · ¥${v.price}` : ''}
             </div>
+            ${locLine ? `<div class="ec-sub">${esc(locLine)}</div>` : ''}
           </div>
         </div>
         <div class="ec-foot">
           <span class="ec-score">★ ${v.rating ?? '—'}</span>
+          ${v.dpRating != null ? `<span class="ec-dp">点评 ${v.dpRating}</span>` : ''}
+          ${v.avgPrice != null ? `<span class="ec-dp">¥${v.avgPrice}/人</span>` : ''}
           ${notes ? `<span class="ec-notes">${esc(notes)}</span>` : ''}
         </div>
       </article>
@@ -1491,6 +1495,40 @@ const Views = (() => {
     return out;
   }
 
+  /**
+   * 解析大众点评 App 分享文本，格式如：
+   * 【店名】
+   * ★★★★★ 4.8
+   * ¥44/人
+   * 商圈 品类
+   * 详细地址
+   * https://m.dianping.com/shopinfo/xxxx?...
+   * 返回 { url, name, dpRating, avgPrice, area, location }（取不到的为 null）
+   */
+  function parseDianpingShare(text) {
+    const url = (text.match(/https?:\/\/[^\s]+/) || [null])[0];
+    const name = (text.match(/【(.+?)】/) || [null, null])[1];
+    const ratingM = text.match(/★+\s*([\d.]+)/);
+    const priceM = text.match(/¥\s*(\d+(?:\.\d+)?)\s*\/\s*人/);
+    // 剩余非空行 = 商圈行 + 地址行（剔除名称/评分/人均/链接）
+    const lines = text
+      .replace(url || '', '')
+      .split(/\n+/)
+      .map((s) => s.trim())
+      .filter((s) => s && !s.includes('【') && !/★/.test(s) && !/¥.*\/人/.test(s));
+    let area = null, location = null;
+    if (lines.length >= 2) { area = lines[0]; location = lines.slice(1).join(' '); }
+    else if (lines.length === 1) { location = lines[0]; }
+    return {
+      url,
+      name: name || null,
+      dpRating: ratingM ? parseFloat(ratingM[1]) : null,
+      avgPrice: priceM ? parseFloat(priceM[1]) : null,
+      area,
+      location,
+    };
+  }
+
   /* ================= 4b. 探店记录表单 ================= */
   // 出品品种：五大类；datalist 之外可直接输入自定义品种
   const DRINK_TYPES = ['黑咖', '奶咖', '手冲', '特调', '其他'];
@@ -1512,6 +1550,12 @@ const Views = (() => {
     let drinkType = editing?.drinkType || '奶咖';
     let temperature = editing?.temperature || null; // 热 | 冰 | null
     let mood = editing?.mood || '😀';
+    // 大众点评提取的附加信息（评分/人均/商圈）
+    let dpExtra = {
+      dpRating: editing?.dpRating ?? null,
+      avgPrice: editing?.avgPrice ?? null,
+      area: editing?.area ?? null,
+    };
 
     view().innerHTML = `
       <section class="page">
@@ -1529,9 +1573,9 @@ const Views = (() => {
           </div>
           <label class="f-label">店名 *<input name="shopName" required value="${esc(editing?.shopName || '')}" placeholder="如 % Arabica"></label>
           <label class="f-label">地址 / 城市<input name="location" value="${esc(editing?.location || '')}"></label>
-          <label class="f-label">店铺链接（大众点评 / 谷歌地图）
+          <label class="f-label">店铺链接 / 分享文本
             <div class="link-row">
-              <input name="link" value="${esc(editing?.link || '')}" placeholder="粘贴链接，谷歌地图可自动提取" inputmode="url">
+              <textarea name="link" rows="3" placeholder="粘贴大众点评分享文本（【店名】+评分+地址+链接）或谷歌地图链接，点「提取」自动解析">${esc(editing?.link || '')}</textarea>
               <button type="button" class="btn btn-mini" id="btn-parse-link">提取</button>
             </div>
           </label>
@@ -1621,20 +1665,40 @@ const Views = (() => {
     // 评分滑块实时数值
     form.elements.rating.addEventListener('input', (e) => { $('#sv-rating').textContent = e.target.value; });
 
-    /* ---- 从链接提取店铺信息 ---- */
+    /* ---- 从链接 / 分享文本提取店铺信息 ---- */
     $('#btn-parse-link').addEventListener('click', () => {
-      const url = form.elements.link.value.trim();
+      const raw = form.elements.link.value.trim();
       const hint = $('#link-hint');
-      if (!url) { hint.innerHTML = `<div class="recog-error">请先粘贴链接</div>`; return; }
-      const info = parseLinkInfo(url);
+      if (!raw) { hint.innerHTML = `<div class="recog-error">请先粘贴链接或分享文本</div>`; return; }
+
+      // 1) 大众点评分享文本（含【店名】或点评链接）
+      if (/【.+?】/.test(raw) || /dianping\.com/.test(raw)) {
+        const info = parseDianpingShare(raw);
+        if (info.name) {
+          form.elements.shopName.value = info.name;
+          if (info.location) form.elements.location.value = info.location;
+          if (info.url) form.elements.link.value = info.url; // 输入框只保留纯链接
+          dpExtra = { dpRating: info.dpRating, avgPrice: info.avgPrice, area: info.area };
+          const parts = [info.name];
+          if (info.dpRating != null) parts.push(`点评 ${info.dpRating} 分`);
+          if (info.avgPrice != null) parts.push(`¥${info.avgPrice}/人`);
+          if (info.area) parts.push(info.area);
+          hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已提取：${esc(parts.join(' · '))}</div>`;
+          Icons.fix(hint);
+        } else {
+          hint.innerHTML = `<div class="recog-loading">未能从该文本解析出店名；链接会随记录保存，可在时间线一键跳转</div>`;
+        }
+        return;
+      }
+
+      // 2) 谷歌地图完整链接
+      const info = parseLinkInfo(raw);
       if (info.shopName) {
         form.elements.shopName.value = info.shopName; // 谷歌地图 /place/店名/
         if (info.location && !form.elements.location.value) form.elements.location.value = info.location;
         hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已从链接提取：${esc(info.shopName)}${info.location ? `（${esc(info.location)}）` : ''}</div>`;
         Icons.fix(hint);
-      } else if (/dianping\.com|dpfile\.com/.test(url)) {
-        hint.innerHTML = `<div class="recog-loading">大众点评有反爬限制，浏览器端无法读取页面内容；链接会随记录保存，可在时间线一键跳转</div>`;
-      } else if (/maps\.app\.goo\.gl|goo\.gl/.test(url)) {
+      } else if (/maps\.app\.goo\.gl|goo\.gl/.test(raw)) {
         hint.innerHTML = `<div class="recog-loading">谷歌短链无法在浏览器端展开，请粘贴完整链接（含 /place/店名）；链接仍会随记录保存</div>`;
       } else {
         hint.innerHTML = `<div class="recog-loading">未识别到可提取的信息，链接仍会随记录保存</div>`;
@@ -1728,7 +1792,12 @@ const Views = (() => {
         location: orNull(form.elements.location.value),
         drinkType,
         drinkName: orNull(form.elements.drinkName.value),
-        link: orNull(form.elements.link.value), // 大众点评 / 谷歌地图链接
+        // 链接规整为纯 URL（用户可能直接保存了整段分享文本）
+        link: (form.elements.link.value.match(/https?:\/\/[^\s]+/) || [null])[0] || orNull(form.elements.link.value),
+        // 大众点评附加信息（提取时写入，可为 null）
+        dpRating: dpExtra.dpRating,
+        avgPrice: dpExtra.avgPrice,
+        area: dpExtra.area,
         temperature, // 热 | 冰 | null（全部品类通用）
         // 品类专属字段：仅对应品类下保存，其余置 null
         espressoBean: drinkType === '奶咖' ? orNull(form.elements.espressoBean.value) : null,
