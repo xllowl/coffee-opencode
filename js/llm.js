@@ -69,7 +69,7 @@ const LLM = (() => {
   function getSettings() {
     let s = {};
     try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch { /* 忽略损坏数据 */ }
-    return { provider: 'zhipu', apiKey: '', model: '', bochaKey: '', ...s };
+    return { provider: 'zhipu', apiKey: '', model: '', bochaKey: '', tavilyKey: '', searchProvider: '', ...s };
   }
 
   function saveSettings(s) {
@@ -77,7 +77,9 @@ const LLM = (() => {
       provider: s.provider || 'zhipu',
       apiKey: s.apiKey || '',
       model: s.model || '',
-      bochaKey: s.bochaKey || '', // 博查搜索 API Key（可选，用于自动查找店铺官网）
+      bochaKey: s.bochaKey || '',       // 博查搜索 Key（可选）
+      tavilyKey: s.tavilyKey || '',     // Tavily 搜索 Key（可选）
+      searchProvider: s.searchProvider || '', // 官网搜索服务：tavily | bocha | ''
     }));
   }
 

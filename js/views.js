@@ -1530,31 +1530,75 @@ const Views = (() => {
     'tripadvisor', 'yelp.', 'tabelog.com', 'ubereats', 'doordash', 'linkedin.com',
     'youtube.com', 'xiaohongshu.com', 'xhslink.com', 'zhihu.com', 'weibo.com',
     'baidu.com', 'amap.com', 'wikipedia.org', 'sohu.com', '163.com', 'qq.com',
+    'taobao.com', 'tmall.com', 'jd.com', 'alibaba.com', 'douban.com',
+    'mafengwo.cn', 'ctrip.com', 'qunar.com', 'bilibili.com', 'superdelivery.com',
+    'xiaoyuzhoufm.com', 'thetigerhood.com', 'izhangcao.com', 'termwiki.com',
+    'pixabay.com', 'pixnio.com', 'pexels.com', 'unsplash.com',
   ];
 
-  /**
-   * 博查 AI 搜索：按「店名 地址 官网」检索，过滤聚合站后取首个疑似官网
-   * 接口支持浏览器跨域；Key 由用户在设置页自配（可选）
-   */
-  async function searchWebsiteBocha(query, key) {
+  /** 搜索词消歧 + 结果打分（博查 / Tavily 共用） */
+  function siteQuery(shopName) {
+    // 店名不含咖啡关键词时补 coffee 消歧（如 Fuglen → Fuglen coffee）
+    return /coffee|cafe|café|咖啡|茶/i.test(shopName) ? shopName : shopName + ' coffee';
+  }
+
+  /** 店名片段多级匹配：前两词(leavescoffee) > 全名 > 长首词(fuglen)；过滤聚合站取前 3 */
+  function scoreSiteCandidates(items, shopName) {
+    const words = shopName.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+    const parts = [];
+    if (words.length >= 2) parts.push(words.slice(0, 2).join(''));
+    if (words.length) parts.push(words.join(''));
+    if (words[0] && words[0].length >= 6) parts.push(words[0]);
+    const scored = [];
+    const seen = new Set(); // 按域名去重（同一官网的多个内页只留一个）
+    for (const r of items) {
+      try {
+        const u = new URL(r.url);
+        const h = u.hostname.toLowerCase();
+        if (SITE_BLOCK.some((b) => h.includes(b)) || seen.has(h)) continue;
+        seen.add(h);
+        const score = parts.some((p) => p.length >= 4 && h.includes(p)) ? 10 : 0;
+        scored.push({ name: r.name || h, url: u.origin, host: h, score }); // 规整为站点根地址
+      } catch { /* 跳过坏链接 */ }
+    }
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, 3);
+  }
+
+  /** 博查 AI 搜索（浏览器跨域可用，Key 自配） */
+  async function searchWebsiteBocha(shopName, key) {
     const res = await fetch('https://api.bochaai.com/v1/web-search', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + key,
       },
-      body: JSON.stringify({ query: query + ' 官网', count: 10 }),
+      body: JSON.stringify({ query: siteQuery(shopName), count: 10 }),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) throw new Error('博查 Key 无效或额度不足，请到博查控制台检查');
+      throw new Error(`HTTP ${res.status}`);
+    }
     const j = await res.json();
-    const list = j.data?.webPages?.value || [];
-    const hit = list.find((r) => {
-      try {
-        const h = new URL(r.url).hostname.toLowerCase();
-        return !SITE_BLOCK.some((b) => h.includes(b));
-      } catch { return false; }
+    return scoreSiteCandidates(j.data?.webPages?.value || [], shopName);
+  }
+
+  /** Tavily 搜索（浏览器跨域可用，Key 自配） */
+  async function searchWebsiteTavily(shopName, key) {
+    const res = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key: key, query: siteQuery(shopName), max_results: 10, search_depth: 'basic' }),
     });
-    return hit?.url || null;
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) throw new Error('Tavily Key 无效或额度不足，请到 Tavily 控制台检查');
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const j = await res.json();
+    return scoreSiteCandidates(
+      (j.results || []).map((r) => ({ name: r.title, url: r.url })),
+      shopName
+    );
   }
 
   /**
@@ -1733,6 +1777,14 @@ const Views = (() => {
     // 评分滑块实时数值
     form.elements.rating.addEventListener('input', (e) => { $('#sv-rating').textContent = e.target.value; });
 
+    // 官网候选点击切换（事件委托，hint 容器不变仅内容替换）
+    $('#link-hint').addEventListener('click', (e) => {
+      const btn = e.target.closest('.site-cand');
+      if (!btn) return;
+      form.elements.website.value = btn.dataset.url;
+      $$('.site-cand', $('#link-hint')).forEach((x) => x.classList.toggle('sel', x === btn));
+    });
+
     /* ---- 搜索官网：以「店名 + 地址 + 官网」打开 Google 搜索，找到后粘回 ---- */
     $('#btn-search-site').addEventListener('click', () => {
       const q = [form.elements.shopName.value.trim(), form.elements.location.value.trim(), '官网']
@@ -1772,24 +1824,40 @@ const Views = (() => {
       if (info.shopName) {
         form.elements.shopName.value = info.shopName; // 谷歌地图 /place/店名/
         if (info.location && !form.elements.location.value) form.elements.location.value = info.location;
-        // 配置了博查 Key 时自动搜索官网（结果仅供参考，保存前请确认）
+        // 配置了搜索服务（Tavily/博查）时自动搜索官网（候选列表，点击可切换；保存前请确认）
         const s = LLM.getSettings();
-        if (s.bochaKey) {
-          hint.innerHTML = `<div class="recog-loading">已提取店名地址，正在用博查搜索官网</div>`;
-          try {
-            const site = await searchWebsiteBocha(`${info.shopName} ${info.location || ''}`, s.bochaKey);
-            if (site) {
-              form.elements.website.value = site;
-              hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已提取；疑似官网（请确认）：${esc(site)}</div>`;
-            } else {
-              hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已提取店名地址；未搜到官网，可点「搜索官网」手动查找</div>`;
+        const provider = s.searchProvider || (s.tavilyKey ? 'tavily' : (s.bochaKey ? 'bocha' : ''));
+        if (provider) {
+          const key = provider === 'tavily' ? s.tavilyKey : s.bochaKey;
+          const label = provider === 'tavily' ? 'Tavily' : '博查';
+          if (!key) {
+            hint.innerHTML = `<div class="recog-error">已提取店名地址；请先在设置页填写 ${label} Key</div>`;
+          } else {
+            hint.innerHTML = `<div class="recog-loading">已提取店名地址，正在用 ${label} 搜索官网</div>`;
+            try {
+              const cands = provider === 'tavily'
+                ? await searchWebsiteTavily(info.shopName, key)
+                : await searchWebsiteBocha(info.shopName, key);
+              if (cands.length) {
+                form.elements.website.value = cands[0].url; // 默认采用最优候选（域名含店名者优先）
+                hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已提取；疑似官网（点击候选可切换，请确认）：</div>
+                  <div class="site-cands">
+                    ${cands.map((c, i) => `
+                      <button type="button" class="site-cand ${i === 0 ? 'sel' : ''}" data-url="${esc(c.url)}">
+                        <span class="sc-name">${esc(c.name)}</span>
+                        <span class="sc-host">${esc(c.host)}</span>
+                      </button>`).join('')}
+                  </div>`;
+              } else {
+                hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已提取店名地址；未搜到官网，可点「搜索官网」手动查找</div>`;
+              }
+            } catch (err) {
+              hint.innerHTML = `<div class="recog-error"><i class="fa-solid fa-circle-exclamation" data-emo="❌"></i> 已提取店名地址；官网搜索失败：${esc(err.message)}，可点「搜索官网」手动查找</div>`;
             }
-          } catch (err) {
-            hint.innerHTML = `<div class="recog-error"><i class="fa-solid fa-circle-exclamation" data-emo="❌"></i> 已提取店名地址；官网搜索失败：${esc(err.message)}，可点「搜索官网」手动查找</div>`;
           }
           Icons.fix(hint);
         } else {
-          hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已从链接提取：${esc(info.shopName)}${info.location ? `（${esc(info.location)}）` : ''}，官网可点下方「搜索官网」查找后粘贴（设置页配置博查 Key 可自动搜索）</div>`;
+          hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已从链接提取：${esc(info.shopName)}${info.location ? `（${esc(info.location)}）` : ''}，官网可点下方「搜索官网」查找后粘贴（设置页配置 Tavily/博查 Key 可自动搜索）</div>`;
           Icons.fix(hint);
         }
       } else if (/maps\.app\.goo\.gl|goo\.gl/.test(raw)) {
@@ -2320,8 +2388,18 @@ const Views = (() => {
             <label class="f-label">模型名（留空用默认）
               <input id="set-model" value="${esc(s.model)}" placeholder="">
             </label>
+            <label class="f-label">官网搜索服务（可选）
+              <select id="set-search-provider">
+                <option value="">不使用</option>
+                <option value="tavily" ${(s.searchProvider || (s.tavilyKey ? 'tavily' : '')) === 'tavily' ? 'selected' : ''}>Tavily</option>
+                <option value="bocha" ${s.searchProvider === 'bocha' ? 'selected' : ''}>博查</option>
+              </select>
+            </label>
+            <label class="f-label">Tavily API Key（可选）
+              <input id="set-tavily-key" type="password" value="${esc(s.tavilyKey || '')}" placeholder="tvly-...，提取店铺链接时自动搜索官网" autocomplete="off">
+            </label>
             <label class="f-label">博查搜索 API Key（可选）
-              <input id="set-bocha-key" type="password" value="${esc(s.bochaKey || '')}" placeholder="配置后，提取店铺链接时自动搜索官网" autocomplete="off">
+              <input id="set-bocha-key" type="password" value="${esc(s.bochaKey || '')}" placeholder="sk-...，与 Tavily 二选一" autocomplete="off">
             </label>
             <div style="display:flex;gap:10px;">
               <button class="btn btn-primary" id="btn-save-set" style="flex:1;">保存设置</button>
@@ -2353,6 +2431,8 @@ const Views = (() => {
       apiKey: $('#set-key').value.trim(),
       model: modelInp.value.trim(),
       bochaKey: $('#set-bocha-key').value.trim(),
+      tavilyKey: $('#set-tavily-key').value.trim(),
+      searchProvider: $('#set-search-provider').value,
     });
     $('#btn-save-set').addEventListener('click', () => {
       saveAll();
