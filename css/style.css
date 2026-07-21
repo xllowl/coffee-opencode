@@ -240,6 +240,36 @@ body.fa-failed i[class*="fa-"] { display: none !important; }
   border: 1px solid #ecdcbf; border-radius: 999px; padding: 1px 8px;
   white-space: nowrap;
 }
+/* 仿大众点评卡片 */
+.dp-card {
+  display: block; text-decoration: none; color: inherit;
+  margin-top: 8px; border-radius: 10px; overflow: hidden;
+  border: 1px solid #ffd9c7; background: #fff8f4;
+  transition: transform .1s ease, box-shadow .1s ease;
+}
+a.dp-card:active { transform: scale(.98); }
+.dp-head {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 10px; background: #ff6633; color: #fff; font-size: 12px;
+}
+.dp-go { margin-left: auto; opacity: .9; }
+.dp-body { padding: 8px 10px 9px; }
+.dp-name { font-size: 14px; font-weight: 700; color: #3e2f25; }
+.dp-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: #8a6a50; }
+.dp-stars {
+  background: linear-gradient(90deg, #ff6633 var(--pct), #e2d5c8 var(--pct));
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent; letter-spacing: 2px; font-size: 13px;
+}
+.dp-score { color: #ff6633; font-weight: 700; }
+/* 官网小卡片 */
+.web-card {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-top: 6px; padding: 4px 10px;
+  font-size: 12px; color: #4d6472; text-decoration: none;
+  background: #eef4f7; border: 1px solid #d8e4ea; border-radius: 999px;
+}
+.web-card:active { transform: scale(.96); }
 .link-row { display: flex; gap: 8px; align-items: center; }
 .link-row input { flex: 1; }
 .link-row .btn-mini { flex: 0 0 auto; }

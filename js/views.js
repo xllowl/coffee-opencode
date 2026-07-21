@@ -333,7 +333,7 @@ const Views = (() => {
     $$('.swipe-wrap').forEach((wrap) => {
       bindSwipe(wrap);
       wrap.querySelector('.entry-card').addEventListener('click', (e) => {
-        if (e.target.closest('a.vc-link')) return; // 点链接图标 → 新标签打开，不进入编辑
+        if (e.target.closest('a')) return; // 点卡片内任何链接 → 新标签打开，不进入编辑
         if (wrap.dataset.justSwiped === '1') { wrap.dataset.justSwiped = ''; return; } // 刚滑完，不触发跳转
         if (wrap.classList.contains('swiped')) { closeSwipe(wrap); return; }             // 展开态点击 = 收起
         location.hash = (wrap.dataset.kind === 'visit' ? '#/visit/edit/' : '#/entry/edit/') + wrap.dataset.id;
@@ -495,6 +495,22 @@ const Views = (() => {
       if (beanStr) extra = ` · ${beanStr}`;
     }
     const locLine = [v.area, v.location].filter(Boolean).join(' · '); // 商圈 · 详细地址
+    const hasDp = v.dpRating != null || v.avgPrice != null; // 有点评数据则渲染点评卡片
+    // 仿大众点评卡片：品牌头 + 店名 + 星级(按分数填充) + 人均 + 商圈/地址，整体可点击跳链接
+    const dpPct = Math.max(0, Math.min(100, ((v.dpRating || 0) / 5) * 100));
+    const dpCard = hasDp ? `
+      <${v.link ? `a href="${esc(v.link)}" target="_blank" rel="noopener"` : 'div'} class="dp-card">
+        <div class="dp-head"><i class="fa-solid fa-star" data-emo="⭐"></i> 大众点评${v.link ? '<span class="dp-go">查看详情 ›</span>' : ''}</div>
+        <div class="dp-body">
+          <div class="dp-name">${esc(v.shopName)}</div>
+          <div class="dp-row">
+            ${v.dpRating != null ? `<span class="dp-stars" style="--pct:${dpPct}%">★★★★★</span><span class="dp-score">${v.dpRating}</span>` : ''}
+            ${v.avgPrice != null ? `<span>¥${v.avgPrice}/人</span>` : ''}
+          </div>
+          ${v.area ? `<div class="dp-row">${esc(v.area)}</div>` : ''}
+          ${v.location ? `<div class="dp-row">${esc(v.location)}</div>` : ''}
+        </div>
+      </${v.link ? 'a' : 'div'}>` : '';
     return `
       <div class="swipe-wrap" data-kind="visit" data-id="${v.id}">
       <div class="swipe-actions"><button type="button" class="swipe-del"><i class="fa-solid fa-trash-can" data-emo="🗑"></i>删除</button></div>
@@ -510,13 +526,12 @@ const Views = (() => {
             <div class="ec-meta">
               <span class="pill pill-visit">${esc(v.drinkType || '其他')}</span>${esc(v.drinkName || '')}${v.temperature ? `（${esc(v.temperature)}）` : ''}${esc(extra)}${v.price != null ? ` · ¥${v.price}` : ''}
             </div>
-            ${locLine ? `<div class="ec-sub">${esc(locLine)}</div>` : ''}
+            ${hasDp ? dpCard : (locLine ? `<div class="ec-sub">${esc(locLine)}</div>` : '')}
+            ${v.website ? `<a class="web-card" href="${esc(v.website)}" target="_blank" rel="noopener"><i class="fa-solid fa-globe" data-emo="🌐"></i> 官网 · ${esc(domainOf(v.website))}</a>` : ''}
           </div>
         </div>
         <div class="ec-foot">
           <span class="ec-score">★ ${v.rating ?? '—'}</span>
-          ${v.dpRating != null ? `<span class="ec-dp">点评 ${v.dpRating}</span>` : ''}
-          ${v.avgPrice != null ? `<span class="ec-dp">¥${v.avgPrice}/人</span>` : ''}
           ${notes ? `<span class="ec-notes">${esc(notes)}</span>` : ''}
         </div>
       </article>
@@ -1504,6 +1519,30 @@ const Views = (() => {
   }
 
   /**
+   * Google Places API (New)：按店名+地址搜索店铺官网（websiteUri）
+   * 该接口支持浏览器跨域调用，Key 由用户在设置页自配
+   */
+  async function fetchPlaceWebsite(query, key) {
+    const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': key,
+        'X-Goog-FieldMask': 'places.websiteUri,places.displayName',
+      },
+      body: JSON.stringify({ textQuery: query, pageSize: 1 }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const j = await res.json();
+    return j.places?.[0]?.websiteUri || null;
+  }
+
+  /** URL → 域名（去 www.） */
+  function domainOf(u) {
+    try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; }
+  }
+
+  /**
    * 解析大众点评 App 分享文本，格式如：
    * 【店名】
    * ★★★★★ 4.8
@@ -1588,6 +1627,9 @@ const Views = (() => {
             </div>
           </label>
           <div id="link-hint"></div>
+          <label class="f-label">官网（提取谷歌链接时自动查找，也可手动填写）
+            <input name="website" value="${esc(editing?.website || '')}" placeholder="https://" inputmode="url">
+          </label>
           <div class="f-label">出品品种</div>
           <div class="drink-pills" id="drink-pills">
             ${DRINK_TYPES.map((t) => `<button type="button" class="drink-pill ${t === drinkType ? 'sel' : ''}" data-t="${t}">${t}</button>`).join('')}
@@ -1674,7 +1716,7 @@ const Views = (() => {
     form.elements.rating.addEventListener('input', (e) => { $('#sv-rating').textContent = e.target.value; });
 
     /* ---- 从链接 / 分享文本提取店铺信息 ---- */
-    $('#btn-parse-link').addEventListener('click', () => {
+    $('#btn-parse-link').addEventListener('click', async () => {
       const raw = form.elements.link.value.trim();
       const hint = $('#link-hint');
       if (!raw) { hint.innerHTML = `<div class="recog-error">请先粘贴链接或分享文本</div>`; return; }
@@ -1704,8 +1746,26 @@ const Views = (() => {
       if (info.shopName) {
         form.elements.shopName.value = info.shopName; // 谷歌地图 /place/店名/
         if (info.location && !form.elements.location.value) form.elements.location.value = info.location;
-        hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已从链接提取：${esc(info.shopName)}${info.location ? `（${esc(info.location)}）` : ''}</div>`;
-        Icons.fix(hint);
+        // 配置了 Google Places Key 时，按 店名+地址 搜索店铺官网
+        const s = LLM.getSettings();
+        if (s.placesKey) {
+          hint.innerHTML = `<div class="recog-loading">已提取店名地址，正在查找官网</div>`;
+          try {
+            const site = await fetchPlaceWebsite(`${info.shopName} ${info.location || ''}`, s.placesKey);
+            if (site) {
+              form.elements.website.value = site;
+              hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已提取并找到官网：${esc(site)}</div>`;
+            } else {
+              hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已提取店名地址；未找到官网，可手动粘贴</div>`;
+            }
+          } catch (err) {
+            hint.innerHTML = `<div class="recog-error"><i class="fa-solid fa-circle-exclamation" data-emo="❌"></i> 已提取店名地址；官网查询失败：${esc(err.message)}</div>`;
+          }
+          Icons.fix(hint);
+        } else {
+          hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已从链接提取：${esc(info.shopName)}${info.location ? `（${esc(info.location)}）` : ''}（配置 Google Places Key 可自动查找官网，见设置页）</div>`;
+          Icons.fix(hint);
+        }
       } else if (/maps\.app\.goo\.gl|goo\.gl/.test(raw)) {
         hint.innerHTML = `<div class="recog-loading">谷歌短链无法在浏览器端展开，请粘贴完整链接（含 /place/店名）；链接仍会随记录保存</div>`;
       } else {
@@ -1806,6 +1866,12 @@ const Views = (() => {
         dpRating: dpExtra.dpRating,
         avgPrice: dpExtra.avgPrice,
         area: dpExtra.area,
+        // 官网：补全协议头
+        website: (() => {
+          const w = (form.elements.website.value || '').trim();
+          if (!w) return null;
+          return /^https?:\/\//i.test(w) ? w : 'https://' + w;
+        })(),
         temperature, // 热 | 冰 | null（全部品类通用）
         // 品类专属字段：仅对应品类下保存，其余置 null
         espressoBean: drinkType === '奶咖' ? orNull(form.elements.espressoBean.value) : null,
@@ -2228,6 +2294,9 @@ const Views = (() => {
             <label class="f-label">模型名（留空用默认）
               <input id="set-model" value="${esc(s.model)}" placeholder="">
             </label>
+            <label class="f-label">Google Places API Key（可选）
+              <input id="set-places-key" type="password" value="${esc(s.placesKey || '')}" placeholder="配置后，提取谷歌链接时自动查找店铺官网" autocomplete="off">
+            </label>
             <div style="display:flex;gap:10px;">
               <button class="btn btn-primary" id="btn-save-set" style="flex:1;">保存设置</button>
               <button class="btn" id="btn-test" style="flex:1;">测试连接</button>
@@ -2253,14 +2322,20 @@ const Views = (() => {
     providerSel.addEventListener('change', syncPlaceholder);
     syncPlaceholder();
 
+    const saveAll = () => LLM.saveSettings({
+      provider: providerSel.value,
+      apiKey: $('#set-key').value.trim(),
+      model: modelInp.value.trim(),
+      placesKey: $('#set-places-key').value.trim(),
+    });
     $('#btn-save-set').addEventListener('click', () => {
-      LLM.saveSettings({ provider: providerSel.value, apiKey: $('#set-key').value.trim(), model: modelInp.value.trim() });
+      saveAll();
       toast('设置已保存');
     });
 
     // 测试连接：发纯文本请求验证 Key
     $('#btn-test').addEventListener('click', async () => {
-      LLM.saveSettings({ provider: providerSel.value, apiKey: $('#set-key').value.trim(), model: modelInp.value.trim() });
+      saveAll();
       const box = $('#test-result');
       const btn = $('#btn-test');
       btn.disabled = true; btn.textContent = '测试中…';
