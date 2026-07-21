@@ -69,7 +69,7 @@ const LLM = (() => {
   function getSettings() {
     let s = {};
     try { s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}'); } catch { /* 忽略损坏数据 */ }
-    return { provider: 'zhipu', apiKey: '', model: '', placesKey: '', ...s };
+    return { provider: 'zhipu', apiKey: '', model: '', bochaKey: '', ...s };
   }
 
   function saveSettings(s) {
@@ -77,7 +77,7 @@ const LLM = (() => {
       provider: s.provider || 'zhipu',
       apiKey: s.apiKey || '',
       model: s.model || '',
-      placesKey: s.placesKey || '', // Google Places API Key（可选，用于查找店铺官网）
+      bochaKey: s.bochaKey || '', // 博查搜索 API Key（可选，用于自动查找店铺官网）
     }));
   }
 

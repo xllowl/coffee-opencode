@@ -1518,28 +1518,43 @@ const Views = (() => {
     return out;
   }
 
-  /**
-   * Google Places API (New)：按店名+地址搜索店铺官网（websiteUri）
-   * 该接口支持浏览器跨域调用，Key 由用户在设置页自配
-   */
-  async function fetchPlaceWebsite(query, key) {
-    const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': key,
-        'X-Goog-FieldMask': 'places.websiteUri,places.displayName',
-      },
-      body: JSON.stringify({ textQuery: query, pageSize: 1 }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const j = await res.json();
-    return j.places?.[0]?.websiteUri || null;
-  }
-
   /** URL → 域名（去 www.） */
   function domainOf(u) {
     try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; }
+  }
+
+  // 查找官网时过滤掉的聚合/平台站点（命中这些域名不认为是官网）
+  const SITE_BLOCK = [
+    'dianping.com', 'dpfile.com', 'meituan.com', 'google.', 'maps.', 'goo.gl',
+    'instagram.com', 'facebook.com', 'twitter.com', 'x.com', 'threads.net',
+    'tripadvisor', 'yelp.', 'tabelog.com', 'ubereats', 'doordash', 'linkedin.com',
+    'youtube.com', 'xiaohongshu.com', 'xhslink.com', 'zhihu.com', 'weibo.com',
+    'baidu.com', 'amap.com', 'wikipedia.org', 'sohu.com', '163.com', 'qq.com',
+  ];
+
+  /**
+   * 博查 AI 搜索：按「店名 地址 官网」检索，过滤聚合站后取首个疑似官网
+   * 接口支持浏览器跨域；Key 由用户在设置页自配（可选）
+   */
+  async function searchWebsiteBocha(query, key) {
+    const res = await fetch('https://api.bochaai.com/v1/web-search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + key,
+      },
+      body: JSON.stringify({ query: query + ' 官网', count: 10 }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const j = await res.json();
+    const list = j.data?.webPages?.value || [];
+    const hit = list.find((r) => {
+      try {
+        const h = new URL(r.url).hostname.toLowerCase();
+        return !SITE_BLOCK.some((b) => h.includes(b));
+      } catch { return false; }
+    });
+    return hit?.url || null;
   }
 
   /**
@@ -1627,8 +1642,11 @@ const Views = (() => {
             </div>
           </label>
           <div id="link-hint"></div>
-          <label class="f-label">官网（提取谷歌链接时自动查找，也可手动填写）
-            <input name="website" value="${esc(editing?.website || '')}" placeholder="https://" inputmode="url">
+          <label class="f-label">官网（手动粘贴，或点右侧按钮搜索）
+            <div class="link-row">
+              <input name="website" value="${esc(editing?.website || '')}" placeholder="https://" inputmode="url">
+              <button type="button" class="btn btn-mini" id="btn-search-site">搜索官网</button>
+            </div>
           </label>
           <div class="f-label">出品品种</div>
           <div class="drink-pills" id="drink-pills">
@@ -1715,6 +1733,14 @@ const Views = (() => {
     // 评分滑块实时数值
     form.elements.rating.addEventListener('input', (e) => { $('#sv-rating').textContent = e.target.value; });
 
+    /* ---- 搜索官网：以「店名 + 地址 + 官网」打开 Google 搜索，找到后粘回 ---- */
+    $('#btn-search-site').addEventListener('click', () => {
+      const q = [form.elements.shopName.value.trim(), form.elements.location.value.trim(), '官网']
+        .filter(Boolean).join(' ');
+      if (!form.elements.shopName.value.trim()) { toast('先填写店名再搜索'); return; }
+      window.open('https://www.google.com/search?q=' + encodeURIComponent(q), '_blank', 'noopener');
+    });
+
     /* ---- 从链接 / 分享文本提取店铺信息 ---- */
     $('#btn-parse-link').addEventListener('click', async () => {
       const raw = form.elements.link.value.trim();
@@ -1746,24 +1772,24 @@ const Views = (() => {
       if (info.shopName) {
         form.elements.shopName.value = info.shopName; // 谷歌地图 /place/店名/
         if (info.location && !form.elements.location.value) form.elements.location.value = info.location;
-        // 配置了 Google Places Key 时，按 店名+地址 搜索店铺官网
+        // 配置了博查 Key 时自动搜索官网（结果仅供参考，保存前请确认）
         const s = LLM.getSettings();
-        if (s.placesKey) {
-          hint.innerHTML = `<div class="recog-loading">已提取店名地址，正在查找官网</div>`;
+        if (s.bochaKey) {
+          hint.innerHTML = `<div class="recog-loading">已提取店名地址，正在用博查搜索官网</div>`;
           try {
-            const site = await fetchPlaceWebsite(`${info.shopName} ${info.location || ''}`, s.placesKey);
+            const site = await searchWebsiteBocha(`${info.shopName} ${info.location || ''}`, s.bochaKey);
             if (site) {
               form.elements.website.value = site;
-              hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已提取并找到官网：${esc(site)}</div>`;
+              hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已提取；疑似官网（请确认）：${esc(site)}</div>`;
             } else {
-              hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已提取店名地址；未找到官网，可手动粘贴</div>`;
+              hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已提取店名地址；未搜到官网，可点「搜索官网」手动查找</div>`;
             }
           } catch (err) {
-            hint.innerHTML = `<div class="recog-error"><i class="fa-solid fa-circle-exclamation" data-emo="❌"></i> 已提取店名地址；官网查询失败：${esc(err.message)}</div>`;
+            hint.innerHTML = `<div class="recog-error"><i class="fa-solid fa-circle-exclamation" data-emo="❌"></i> 已提取店名地址；官网搜索失败：${esc(err.message)}，可点「搜索官网」手动查找</div>`;
           }
           Icons.fix(hint);
         } else {
-          hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已从链接提取：${esc(info.shopName)}${info.location ? `（${esc(info.location)}）` : ''}（配置 Google Places Key 可自动查找官网，见设置页）</div>`;
+          hint.innerHTML = `<div class="recog-ok"><i class="fa-solid fa-circle-check" data-emo="✅"></i> 已从链接提取：${esc(info.shopName)}${info.location ? `（${esc(info.location)}）` : ''}，官网可点下方「搜索官网」查找后粘贴（设置页配置博查 Key 可自动搜索）</div>`;
           Icons.fix(hint);
         }
       } else if (/maps\.app\.goo\.gl|goo\.gl/.test(raw)) {
@@ -2294,8 +2320,8 @@ const Views = (() => {
             <label class="f-label">模型名（留空用默认）
               <input id="set-model" value="${esc(s.model)}" placeholder="">
             </label>
-            <label class="f-label">Google Places API Key（可选）
-              <input id="set-places-key" type="password" value="${esc(s.placesKey || '')}" placeholder="配置后，提取谷歌链接时自动查找店铺官网" autocomplete="off">
+            <label class="f-label">博查搜索 API Key（可选）
+              <input id="set-bocha-key" type="password" value="${esc(s.bochaKey || '')}" placeholder="配置后，提取店铺链接时自动搜索官网" autocomplete="off">
             </label>
             <div style="display:flex;gap:10px;">
               <button class="btn btn-primary" id="btn-save-set" style="flex:1;">保存设置</button>
@@ -2326,7 +2352,7 @@ const Views = (() => {
       provider: providerSel.value,
       apiKey: $('#set-key').value.trim(),
       model: modelInp.value.trim(),
-      placesKey: $('#set-places-key').value.trim(),
+      bochaKey: $('#set-bocha-key').value.trim(),
     });
     $('#btn-save-set').addEventListener('click', () => {
       saveAll();
