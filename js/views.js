@@ -487,6 +487,8 @@ const Views = (() => {
       if (num(br.water)) items.push({ ico: 'fa-droplet', emo: '💧', val: `${num(br.water)} g` });
       if (num(br.temp)) items.push({ ico: 'fa-temperature-half', emo: '🌡', val: `${num(br.temp)} ℃` });
     }
+    // 研磨刻度：fa-sliders 滑杆图标最贴近「刻度」语义
+    if (br.millSetting) items.push({ ico: 'fa-sliders', emo: '⚙️', val: br.millSetting });
     if (br.totalTime) items.push({ ico: 'fa-clock', emo: '⏱', val: br.totalTime });
     if (num(br.dose) && num(br.water)) items.push({ ico: 'fa-scale-balanced', emo: '%', val: `1:${(num(br.water) / num(br.dose)).toFixed(1)}` });
     if (e.temperature) items.push({ ico: e.temperature === '冰' ? 'fa-snowflake' : 'fa-fire-flame-simple', emo: e.temperature === '冰' ? '❄️' : '🔥', val: e.temperature });
@@ -512,6 +514,7 @@ const Views = (() => {
             </div>
             ${b?.roaster ? `<div class="bl">烘焙商</div><div class="bv">${esc(b.roaster)} ${WorldMap.flagOf(b.origin)}</div>` : ''}
             ${b?.origin || b?.region ? `<div class="bl">产地</div><div class="bv">${esc([b.origin, b.region].filter(Boolean).join(' · '))}</div>` : ''}
+            ${b?.variety ? `<div class="bl">豆种</div><div class="bv">${esc(b.variety)}</div>` : ''}
             ${b?.process || b?.roastLevel ? `<div class="bv bm-pills">${b.process ? `<span class="pill pill-process">${esc(b.process)}</span>` : ''}${b.roastLevel ? `<span class="pill pill-roast">${esc(b.roastLevel)}</span>` : ''}</div>` : ''}
             <div class="bl">${esc(p ? p.name : '参数')}</div>
             <div class="brew-params">${paramsHtml}</div>
