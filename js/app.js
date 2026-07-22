@@ -34,6 +34,9 @@
   window.addEventListener('hashchange', render);
 
   window.addEventListener('DOMContentLoaded', async () => {
+    // 应用用户选择的字体（设置页可切换）
+    document.body.dataset.font = localStorage.getItem('coffee_font') || '';
+
     // FontAwesome CDN 加载检测，失败时降级为 emoji 文本（不阻塞渲染）
     Icons.init();
 

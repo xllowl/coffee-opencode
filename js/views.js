@@ -507,15 +507,21 @@ const Views = (() => {
           <div class="brew-main">
             <div class="bm-head">
               <div class="bm-title">
-                <div class="bl">豆子</div>
                 <div class="bv bv-name">${esc(b ? b.name : '（豆子已删除）')}</div>
+                ${(() => {
+                  // 摘要行：烘焙商+国旗 · 产地·产区 · 豆种（紧凑排版，自动隐藏空项）
+                  if (!b) return '';
+                  const parts = [];
+                  if (b.roaster) parts.push(b.roaster + (WorldMap.flagOf(b.origin) ? ' ' + WorldMap.flagOf(b.origin) : ''));
+                  const place = [b.origin, b.region].filter(Boolean).join('·');
+                  if (place) parts.push(place);
+                  if (b.variety) parts.push(b.variety);
+                  return parts.length ? `<div class="bm-sub">${esc(parts.join(' · '))}</div>` : '';
+                })()}
               </div>
               ${b?.cardPhoto ? `<img class="brew-photo" src="${b.cardPhoto}" alt="">` : ''}
             </div>
-            ${b?.roaster ? `<div class="bl">烘焙商</div><div class="bv">${esc(b.roaster)} ${WorldMap.flagOf(b.origin)}</div>` : ''}
-            ${b?.origin || b?.region ? `<div class="bl">产地</div><div class="bv">${esc([b.origin, b.region].filter(Boolean).join(' · '))}</div>` : ''}
-            ${b?.variety ? `<div class="bl">豆种</div><div class="bv">${esc(b.variety)}</div>` : ''}
-            ${b?.process || b?.roastLevel ? `<div class="bv bm-pills">${b.process ? `<span class="pill pill-process">${esc(b.process)}</span>` : ''}${b.roastLevel ? `<span class="pill pill-roast">${esc(b.roastLevel)}</span>` : ''}</div>` : ''}
+            ${b?.process || b?.roastLevel ? `<div class="bm-pills">${b.process ? `<span class="pill pill-process">${esc(b.process)}</span>` : ''}${b.roastLevel ? `<span class="pill pill-roast">${esc(b.roastLevel)}</span>` : ''}</div>` : ''}
             <div class="bl">${esc(p ? p.name : '参数')}</div>
             <div class="brew-params">${paramsHtml}</div>
             ${notes ? `<div class="brew-note"><i class="fa-solid fa-note-sticky" data-emo="📝"></i>${esc(notes)}</div>` : ''}
@@ -2480,6 +2486,19 @@ const Views = (() => {
         </div>
 
         <div class="card settings-sec">
+          <h3>外观</h3>
+          <div class="form">
+            <label class="f-label">字体（中文 / 英文）
+              <select id="set-font">
+                <option value="">手账体（霞鹜文楷 + Georgia，默认）</option>
+                <option value="system">系统黑体（无衬线）</option>
+                <option value="serif">衬线体（宋体 + Georgia）</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="card settings-sec">
           <h3>数据管理</h3>
           <div class="form">
             <button class="btn" id="btn-export"><i class="fa-solid fa-file-export" data-emo="📤"></i> 导出全部数据（JSON）</button>
@@ -2495,6 +2514,15 @@ const Views = (() => {
     const syncPlaceholder = () => { modelInp.placeholder = '默认 ' + P[providerSel.value].model; };
     providerSel.addEventListener('change', syncPlaceholder);
     syncPlaceholder();
+
+    // 字体切换：立即生效并持久化（localStorage 键 coffee_font）
+    const fontSel = $('#set-font');
+    fontSel.value = localStorage.getItem('coffee_font') || '';
+    fontSel.addEventListener('change', () => {
+      localStorage.setItem('coffee_font', fontSel.value);
+      document.body.dataset.font = fontSel.value;
+      toast('字体已切换');
+    });
 
     const saveAll = () => LLM.saveSettings({
       provider: providerSel.value,

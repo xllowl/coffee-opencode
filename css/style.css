@@ -14,14 +14,25 @@
   --radius: 12px;
   --shadow: 0 1px 2px rgba(62, 47, 37, .06), 0 6px 18px rgba(62, 47, 37, .08);
   --tabbar-h: 62px;
+  /* 字体：--font-body 正文（数字英文在前，中文回落）；--font-hand 手写标题 */
+  --font-body: Georgia, 'Times New Roman', 'LXGW Wenkai', 'Songti SC', serif;
+  --font-hand: 'LXGW Wenkai', Georgia, 'Songti SC', serif;
+}
+/* 设置页可切换的中/英字体方案 */
+body[data-font="system"] {
+  --font-body: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-hand: var(--font-body);
+}
+body[data-font="serif"] {
+  --font-body: Georgia, 'Times New Roman', 'Songti SC', 'SimSun', serif;
+  --font-hand: 'Songti SC', 'SimSun', Georgia, serif;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; }
 
 body {
-  /* Georgia 在前：数字/英文用衬线体；中文回落到霞鹜文楷 */
-  font-family: Georgia, 'Times New Roman', 'LXGW Wenkai', 'Songti SC', serif;
+  font-family: var(--font-body);
   color: var(--ink);
   background-color: var(--paper);
   /* 淡淡的纸张圆点纹理 */
@@ -74,7 +85,7 @@ body.fa-failed i[class*="fa-"] { display: none !important; }
 }
 .topbar h1 {
   margin: 0;
-  font-family: 'LXGW Wenkai', serif; /* 手写字体标题 */
+  font-family: var(--font-hand); /* 手写字体标题 */
   font-size: 22px;
   letter-spacing: 6px;
   font-weight: 700;
@@ -93,7 +104,7 @@ body.fa-failed i[class*="fa-"] { display: none !important; }
 #view { max-width: 640px; margin: 0 auto; padding: 14px 14px 24px; }
 .page { animation: fadein .18s ease; }
 @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-.page-title { font-family: 'LXGW Wenkai', serif; font-size: 20px; margin: 6px 2px 14px; }
+.page-title { font-family: var(--font-hand); font-size: 20px; margin: 6px 2px 14px; }
 .page-loading, .page-error { text-align: center; color: var(--muted); padding: 60px 0; }
 
 /* ---------------- 卡片（手账贴纸） ---------------- */
@@ -128,7 +139,7 @@ body.fa-failed i[class*="fa-"] { display: none !important; }
 .btn-hero {
   display: block; width: 100%;
   padding: 18px; margin: 12px 0 16px;
-  font-size: 19px; font-family: 'LXGW Wenkai', serif; letter-spacing: 3px;
+  font-size: 19px; font-family: var(--font-hand); letter-spacing: 3px;
   color: #fffaf2; background: linear-gradient(135deg, var(--coffee), var(--accent));
   border: none; border-radius: var(--radius);
   box-shadow: 0 4px 14px rgba(111, 78, 55, .35);
@@ -149,7 +160,7 @@ body.fa-failed i[class*="fa-"] { display: none !important; }
 .btn-photo {
   display: block; width: 100%;
   padding: 16px; margin-bottom: 12px;
-  font-size: 17px; font-family: 'LXGW Wenkai', serif;
+  font-size: 17px; font-family: var(--font-hand);
   color: var(--coffee); background: var(--card);
   border: 2px dashed var(--accent); border-radius: var(--radius);
   cursor: pointer; transition: transform .08s ease, background .15s;
@@ -280,38 +291,39 @@ a.dp-card:active { transform: scale(.98); }
 .ec-head { display: flex; justify-content: space-between; align-items: baseline; }
 .ec-date { font-size: 13px; color: var(--muted); letter-spacing: 1px; }
 .ec-mood { font-size: 20px; }
-.ec-bean { font-family: 'LXGW Wenkai', serif; font-size: 18px; margin: 4px 0 2px; }
+.ec-bean { font-family: var(--font-hand); font-size: 18px; margin: 4px 0 2px; }
 .ec-meta { font-size: 13px; color: var(--muted); }
 .ec-foot { display: flex; gap: 10px; margin-top: 8px; align-items: baseline; }
 .ec-score { color: var(--accent); font-weight: 700; white-space: nowrap; }
 /* 长便签允许自然换行完整显示（不再单行截断） */
 .ec-notes { font-size: 13px; color: var(--ink); opacity: .8; overflow-wrap: anywhere; }
 
-/* ---------------- 冲煮卡片（Beanconqueror 风格） ---------------- */
-.brew-card { display: flex; gap: 12px; }
-.brew-left { flex: 0 0 62px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+/* ---------------- 冲煮卡片（Beanconqueror 风格，紧凑排版） ---------------- */
+.brew-card { display: flex; gap: 10px; }
+.brew-left { flex: 0 0 54px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .brew-method {
-  width: 56px; height: 56px; border-radius: 50%;
+  width: 50px; height: 50px; border-radius: 50%;
   border: 1px solid var(--line); background: #fff;
   display: flex; align-items: center; justify-content: center;
   overflow: hidden; box-shadow: var(--shadow);
 }
-.brew-method img { width: 36px; height: 36px; object-fit: contain; }
-.brew-method i[class*="fa-"] { font-size: 20px; color: var(--coffee); }
-.brew-score { font-size: 15px; font-weight: 700; color: var(--accent); white-space: nowrap; }
-.bs-of { font-size: 11px; font-weight: 400; color: var(--muted); }
+.brew-method img { width: 32px; height: 32px; object-fit: contain; }
+.brew-method i[class*="fa-"] { font-size: 18px; color: var(--coffee); }
+.brew-score { font-size: 14px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.bs-of { font-size: 10px; font-weight: 400; color: var(--muted); }
 .brew-main { flex: 1; min-width: 0; }
 .bl { font-size: 11px; color: var(--muted); }
-.bv { font-size: 14px; margin-bottom: 6px; }
-.bv-name { font-family: 'LXGW Wenkai', serif; font-size: 16px; }
+.bv-name { font-family: var(--font-hand); font-size: 16px; line-height: 1.4; }
+/* 摘要行：烘焙商·产地·豆种合一 */
+.bm-sub { font-size: 12px; color: var(--muted); line-height: 1.5; margin-top: 1px; overflow-wrap: anywhere; }
 .bm-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-.brew-photo { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; border: 1px solid var(--line); flex: 0 0 52px; }
-.bm-pills { margin: 2px 0 4px; }
-.brew-params { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; margin: 2px 0 4px; }
+.brew-photo { width: 44px; height: 44px; border-radius: 9px; object-fit: cover; border: 1px solid var(--line); flex: 0 0 44px; }
+.bm-pills { margin: 1px 0 3px; }
+.brew-params { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 13px; margin: 1px 0 2px; }
 .bp-item i[class*="fa-"] { color: var(--coffee); margin-right: 4px; }
-.brew-note { font-size: 13px; color: var(--ink); opacity: .85; margin-top: 4px; overflow-wrap: anywhere; }
+.brew-note { font-size: 13px; color: var(--ink); opacity: .85; margin-top: 3px; overflow-wrap: anywhere; }
 .brew-note i[class*="fa-"] { color: var(--muted); margin-right: 5px; }
-.brew-date { text-align: right; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.brew-date { text-align: right; font-size: 12px; color: var(--muted); margin-top: 4px; }
 
 /* ---------------- 左滑删除 ---------------- */
 .swipe-wrap { position: relative; overflow: hidden; border-radius: var(--radius); margin-bottom: 12px; }
@@ -338,7 +350,7 @@ a.dp-card:active { transform: scale(.98); }
 /* ---------------- 空状态 / 错误 ---------------- */
 .empty {
   text-align: center; padding: 70px 20px; color: var(--muted);
-  font-family: 'LXGW Wenkai', serif; font-size: 17px; line-height: 2;
+  font-family: var(--font-hand); font-size: 17px; line-height: 2;
 }
 .empty .emo { font-size: 44px; display: block; margin-bottom: 8px; }
 
@@ -363,7 +375,7 @@ a.dp-card:active { transform: scale(.98); }
   font-size: 26px; background: var(--paper);
 }
 .bc-body { flex: 1; min-width: 0; }
-.bc-name { font-family: 'LXGW Wenkai', serif; font-size: 17px; }
+.bc-name { font-family: var(--font-hand); font-size: 17px; }
 .bc-origin { font-size: 13px; color: var(--muted); margin: 2px 0 4px; }
 .bc-pills { margin: 2px 0 6px; }
 .bc-progress {
@@ -454,7 +466,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid rgba(192, 133, 82
 }
 .pick-item:active { transform: scale(.97); }
 .pick-item.sel { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(192, 133, 82, .35); }
-.pick-item .pi-name { font-family: 'LXGW Wenkai', serif; font-size: 16px; }
+.pick-item .pi-name { font-family: var(--font-hand); font-size: 16px; }
 .pick-item .pi-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
 
 .copy-last { margin: 4px 0 12px; }
@@ -540,7 +552,7 @@ input[type=range]::-moz-range-thumb {
 .stat-card .sc-num { font-size: 26px; font-weight: 700; color: var(--coffee); }
 .stat-card .sc-label { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .chart-card { padding: 14px; }
-.chart-card h3 { margin: 0 0 10px; font-size: 15px; font-family: 'LXGW Wenkai', serif; color: var(--coffee); }
+.chart-card h3 { margin: 0 0 10px; font-size: 15px; font-family: var(--font-hand); color: var(--coffee); }
 .chart-box { position: relative; height: 240px; }
 
 /* 器具图标选择器 */
@@ -576,18 +588,18 @@ input[type=range]::-moz-range-thumb {
 .map-chip:active { transform: scale(.94); }
 .map-chip.sel { background: var(--coffee); color: #fffaf2; border-color: var(--coffee); }
 .map-detail-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
-.map-detail-title { font-family: 'LXGW Wenkai', serif; font-size: 17px; }
+.map-detail-title { font-family: var(--font-hand); font-size: 17px; }
 .map-detail-sub { font-size: 13px; color: var(--muted); }
 .map-bean-meta { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .map-unmatched { font-size: 12px; color: var(--muted); padding: 4px 6px; line-height: 1.8; }
 .map-entry {
   display: block; text-decoration: none; text-align: center;
-  color: var(--coffee); font-family: 'LXGW Wenkai', serif; font-size: 16px;
+  color: var(--coffee); font-family: var(--font-hand); font-size: 16px;
 }
 
 /* ---------------- 设置页 ---------------- */
 .settings-sec { margin-bottom: 18px; }
-.settings-sec h3 { font-family: 'LXGW Wenkai', serif; font-size: 16px; color: var(--coffee); margin: 0 0 10px; }
+.settings-sec h3 { font-family: var(--font-hand); font-size: 16px; color: var(--coffee); margin: 0 0 10px; }
 .test-result { margin-top: 10px; font-size: 14px; padding: 10px 12px; border-radius: 10px; }
 .test-result.ok { background: #eaf3e6; color: #47703f; }
 .test-result.err { background: #f9ece7; color: #a0462d; }
@@ -612,7 +624,7 @@ input[type=range]::-moz-range-thumb {
 /* 环形风味轮画布 */
 .fw-wheel { display: flex; justify-content: center; margin-bottom: 10px; }
 #fw-canvas { width: min(76vw, 300px); cursor: pointer; }
-.fw-title { font-family: 'LXGW Wenkai', serif; font-size: 16px; color: var(--coffee); }
+.fw-title { font-family: var(--font-hand); font-size: 16px; color: var(--coffee); }
 .fw-cats { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 8px; -webkit-overflow-scrolling: touch; }
 .fw-cat {
   flex: 0 0 auto; padding: 6px 12px; border-radius: 999px;
@@ -683,7 +695,7 @@ input[type=range]::-moz-range-thumb {
   padding: 18px; width: 100%; max-width: 380px;
   display: flex; flex-direction: column; gap: 12px;
 }
-.modal-title { margin: 0; font-family: 'LXGW Wenkai', serif; font-size: 17px; }
+.modal-title { margin: 0; font-family: var(--font-hand); font-size: 17px; }
 .modal-text { margin: 0; font-size: 15px; line-height: 1.7; }
 .modal-btns { display: flex; gap: 10px; justify-content: flex-end; }
 
