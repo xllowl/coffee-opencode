@@ -461,25 +461,65 @@ const Views = (() => {
     </div>`;
   }
 
+  /** 冲煮卡片：左侧圆形方法图标 + 评分；右侧 豆子/烘焙商/产地/参数/笔记（参考 Beanconqueror 布局） */
   function entryCard(e, beanMap, prepMap) {
     const b = beanMap[e.beanId];
     const p = prepMap[e.preparationId];
     const notes = (e.tasting?.notes || '').trim();
+    const type = p?.type;
+
+    // 左侧方法图标：优先器具自选 PNG；老数据无该字段按类型取默认图；再缺用 FA 图标兜底
+    const TYPE_ICO = { 'pour-over': 'fa-filter', immersion: 'fa-flask', espresso: 'fa-gauge-high', 'cold-brew': 'fa-glass-water' };
+    const mImg = p?.methodImg !== undefined && p?.methodImg !== null ? p.methodImg : METHOD_IMG_BY_TYPE[type];
+    const methodInner = mImg
+      ? `<img src="./${esc(mImg)}" alt="${esc(p?.name || '')}">`
+      : `<i class="fa-solid ${TYPE_ICO[type] || 'fa-mug-hot'}" data-emo="☕"></i>`;
+
+    // 参数行（按器具类型取舍；icon 选用 FA 免费库中相近者）
+    const br = e.brew || {};
+    const items = [];
+    if (num(br.dose)) items.push({ ico: 'fa-weight-hanging', emo: '⚖️', val: `${num(br.dose)} g` });
+    if (type === 'espresso') {
+      if (num(br.yield)) items.push({ ico: 'fa-mug-hot', emo: '☕', val: `${num(br.yield)} g` });
+      if (br.extractionTime) items.push({ ico: 'fa-clock', emo: '⏱', val: br.extractionTime });
+      if (num(br.pressure)) items.push({ ico: 'fa-gauge-high', emo: '📊', val: `${num(br.pressure)} bar` });
+    } else {
+      if (num(br.water)) items.push({ ico: 'fa-droplet', emo: '💧', val: `${num(br.water)} g` });
+      if (num(br.temp)) items.push({ ico: 'fa-temperature-half', emo: '🌡', val: `${num(br.temp)} ℃` });
+    }
+    if (br.totalTime) items.push({ ico: 'fa-clock', emo: '⏱', val: br.totalTime });
+    if (num(br.dose) && num(br.water)) items.push({ ico: 'fa-scale-balanced', emo: '%', val: `1:${(num(br.water) / num(br.dose)).toFixed(1)}` });
+    if (e.temperature) items.push({ ico: e.temperature === '冰' ? 'fa-snowflake' : 'fa-fire-flame-simple', emo: e.temperature === '冰' ? '❄️' : '🔥', val: e.temperature });
+    const paramsHtml = items.map((it) =>
+      `<span class="bp-item"><i class="fa-solid ${it.ico}" data-emo="${it.emo}"></i>${esc(it.val)}</span>`).join('');
+
     return `
       <div class="swipe-wrap" data-kind="brew" data-id="${e.id}">
       <div class="swipe-actions"><button type="button" class="swipe-del"><i class="fa-solid fa-trash-can" data-emo="🗑"></i>删除</button></div>
       <article class="card entry-card swipe-content">
-        <div class="ec-head">
-          <span class="ec-date">${esc(prettyDate(e.date))}</span>
-          <span class="ec-mood">${esc(moodEmoji(e.mood))}</span>
+        <div class="brew-card">
+          <div class="brew-left">
+            <div class="brew-method">${methodInner}</div>
+            ${e.tasting?.score != null ? `<div class="brew-score">${e.tasting.score}<span class="bs-of">/10 ★</span></div>` : ''}
+          </div>
+          <div class="brew-main">
+            <div class="bm-head">
+              <div class="bm-title">
+                <div class="bl">豆子</div>
+                <div class="bv bv-name">${esc(b ? b.name : '（豆子已删除）')}</div>
+              </div>
+              ${b?.cardPhoto ? `<img class="brew-photo" src="${b.cardPhoto}" alt="">` : ''}
+            </div>
+            ${b?.roaster ? `<div class="bl">烘焙商</div><div class="bv">${esc(b.roaster)} ${WorldMap.flagOf(b.origin)}</div>` : ''}
+            ${b?.origin || b?.region ? `<div class="bl">产地</div><div class="bv">${esc([b.origin, b.region].filter(Boolean).join(' · '))}</div>` : ''}
+            ${b?.process || b?.roastLevel ? `<div class="bv bm-pills">${b.process ? `<span class="pill pill-process">${esc(b.process)}</span>` : ''}${b.roastLevel ? `<span class="pill pill-roast">${esc(b.roastLevel)}</span>` : ''}</div>` : ''}
+            <div class="bl">${esc(p ? p.name : '参数')}</div>
+            <div class="brew-params">${paramsHtml}</div>
+            ${notes ? `<div class="brew-note"><i class="fa-solid fa-note-sticky" data-emo="📝"></i>${esc(notes)}</div>` : ''}
+            ${e.tasting?.flavors?.length ? `<div class="ec-flavors">${e.tasting.flavors.map((x) => `<span class="flavor-chip"${flavorStyle(x)}>${esc(x)}</span>`).join('')}</div>` : ''}
+            <div class="brew-date">${esc(prettyDate(e.date))} · ${esc(moodEmoji(e.mood))}</div>
+          </div>
         </div>
-        <div class="ec-bean">${esc(b ? b.name : '（豆子已删除）')}</div>
-        <div class="ec-meta">${esc(p ? p.name : '—')}${e.temperature ? `（${esc(e.temperature)}）` : ''} · 粉水比 ${ratioText(e)} · 粉 ${num(e.brew?.dose) || '-'}g</div>
-        <div class="ec-foot">
-          <span class="ec-score">★ ${e.tasting?.score ?? '—'}</span>
-          ${notes ? `<span class="ec-notes">${esc(notes)}</span>` : ''}
-        </div>
-        ${e.tasting?.flavors?.length ? `<div class="ec-flavors">${e.tasting.flavors.map((x) => `<span class="flavor-chip"${flavorStyle(x)}>${esc(x)}</span>`).join('')}</div>` : ''}
       </article>
       </div>`;
   }
@@ -652,23 +692,50 @@ const Views = (() => {
     };
   }
 
+  // 器具图标：methods/ 下的 PNG，按类型默认映射（冷萃无对应图，用 FA 图标兜底）
+  const METHOD_IMGS = ['methods/origami.png', 'methods/switchcup.png', 'methods/filter.png'];
+  const METHOD_IMG_BY_TYPE = {
+    'pour-over': 'methods/origami.png',
+    'immersion': 'methods/switchcup.png',
+    'espresso': 'methods/filter.png',
+    'cold-brew': '',
+  };
+
   /** 器具 新增/编辑 弹窗 */
   async function prepModal(p) {
     const isNew = !p;
-    p = p || { id: 'p_' + Date.now(), name: '', type: 'pour-over', isArchived: false };
+    p = p || { id: 'p_' + Date.now(), name: '', type: 'pour-over', isArchived: false, methodImg: undefined };
+    // 图标当前值：新建按类型默认，编辑用已存值
+    let curImg = p.methodImg !== undefined ? p.methodImg : METHOD_IMG_BY_TYPE[p.type];
     const mask = await formModal(isNew ? '添加器具' : '编辑器具', `
       <label class="f-label">名称<input id="m-name" class="input" value="${esc(p.name)}" placeholder="如 V60 02 树脂"></label>
       <label class="f-label">类型
         <select id="m-type" class="input">
           ${Object.entries(TYPE_LABEL).map(([k, v]) => `<option value="${k}" ${p.type === k ? 'selected' : ''}>${v}</option>`).join('')}
         </select>
-      </label>`);
+      </label>
+      <div class="f-label">图标（冲煮卡片左侧圆形图标）</div>
+      <div class="mi-row" id="mi-row">
+        <button type="button" class="mi-opt ${!curImg ? 'sel' : ''}" data-v="">无</button>
+        ${METHOD_IMGS.map((src) => `<button type="button" class="mi-opt ${curImg === src ? 'sel' : ''}" data-v="${src}"><img src="./${src}" alt=""></button>`).join('')}
+      </div>`);
     if (!mask) return;
+    // 类型切换时联动默认图标；点选覆盖
+    const typeSel = $('#m-type', mask);
+    const syncSel = () => $$('.mi-opt', mask).forEach((x) => x.classList.toggle('sel', x.dataset.v === curImg));
+    typeSel.addEventListener('change', () => { curImg = METHOD_IMG_BY_TYPE[typeSel.value] || ''; syncSel(); });
+    $('#mi-row', mask).addEventListener('click', (e) => {
+      const btn = e.target.closest('.mi-opt');
+      if (!btn) return;
+      curImg = btn.dataset.v;
+      syncSel();
+    });
     const name = $('#m-name', mask).value.trim();
-    p.type = $('#m-type', mask).value;
+    p.type = typeSel.value;
     mask.remove();
     if (!name) { toast('请填写名称'); return; }
     p.name = name;
+    p.methodImg = curImg || null;
     await Store.preparations.put(p);
     toast('已保存');
     library('preps');

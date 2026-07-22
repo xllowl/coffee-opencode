@@ -286,6 +286,32 @@ a.dp-card:active { transform: scale(.98); }
 .ec-score { color: var(--accent); font-weight: 700; white-space: nowrap; }
 .ec-notes { font-size: 13px; color: var(--ink); opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ---------------- 冲煮卡片（Beanconqueror 风格） ---------------- */
+.brew-card { display: flex; gap: 12px; }
+.brew-left { flex: 0 0 62px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.brew-method {
+  width: 56px; height: 56px; border-radius: 50%;
+  border: 1px solid var(--line); background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; box-shadow: var(--shadow);
+}
+.brew-method img { width: 36px; height: 36px; object-fit: contain; }
+.brew-method i[class*="fa-"] { font-size: 20px; color: var(--coffee); }
+.brew-score { font-size: 15px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.bs-of { font-size: 11px; font-weight: 400; color: var(--muted); }
+.brew-main { flex: 1; min-width: 0; }
+.bl { font-size: 11px; color: var(--muted); }
+.bv { font-size: 14px; margin-bottom: 6px; }
+.bv-name { font-family: 'LXGW Wenkai', serif; font-size: 16px; }
+.bm-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.brew-photo { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; border: 1px solid var(--line); flex: 0 0 52px; }
+.bm-pills { margin: 2px 0 4px; }
+.brew-params { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; margin: 2px 0 4px; }
+.bp-item i[class*="fa-"] { color: var(--coffee); margin-right: 4px; }
+.brew-note { font-size: 13px; color: var(--ink); opacity: .85; margin-top: 4px; }
+.brew-note i[class*="fa-"] { color: var(--muted); margin-right: 5px; }
+.brew-date { text-align: right; font-size: 12px; color: var(--muted); margin-top: 6px; }
+
 /* ---------------- 左滑删除 ---------------- */
 .swipe-wrap { position: relative; overflow: hidden; border-radius: var(--radius); margin-bottom: 12px; }
 .swipe-wrap > .card { margin-bottom: 0; } /* 卡片间距移到 wrapper */
@@ -515,6 +541,19 @@ input[type=range]::-moz-range-thumb {
 .chart-card { padding: 14px; }
 .chart-card h3 { margin: 0 0 10px; font-size: 15px; font-family: 'LXGW Wenkai', serif; color: var(--coffee); }
 .chart-box { position: relative; height: 240px; }
+
+/* 器具图标选择器 */
+.mi-row { display: flex; gap: 8px; }
+.mi-opt {
+  width: 52px; height: 52px; border-radius: 10px;
+  border: 1px solid var(--line); background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-family: inherit; font-size: 13px; color: var(--muted);
+  cursor: pointer; transition: border-color .12s, box-shadow .12s, transform .08s;
+}
+.mi-opt:active { transform: scale(.94); }
+.mi-opt img { width: 34px; height: 34px; object-fit: contain; }
+.mi-opt.sel { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(192, 133, 82, .35); }
 
 /* ---------------- 世界产地地图 ---------------- */
 .map-card { padding: 10px; }
