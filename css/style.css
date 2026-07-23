@@ -684,6 +684,39 @@ input[type=range]::-moz-range-thumb {
 .dict-label { flex: 0 0 60px; color: var(--muted); font-size: 12px; padding-top: 2px; }
 .dict-val { flex: 1; }
 
+/* 探店多图：横向滑动条带 */
+.vc-strip {
+  display: flex; gap: 8px; overflow-x: auto;
+  margin-top: 8px; scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.vc-strip img {
+  flex: 0 0 72%; height: 140px; object-fit: cover;
+  border-radius: 10px; border: 1px solid var(--line);
+  scroll-snap-align: start;
+}
+.td-strip img { flex: 0 0 84%; height: 210px; }
+/* 表单内记录照片 */
+.photo-strip { display: flex; flex-wrap: wrap; gap: 8px; }
+.ps-thumb { position: relative; }
+.ps-thumb img { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); }
+.ps-thumb button {
+  position: absolute; top: -6px; right: -6px;
+  width: 20px; height: 20px; border-radius: 50%;
+  border: none; background: var(--ink); color: #fff;
+  font-size: 12px; line-height: 1; cursor: pointer; padding: 0;
+}
+.ps-add {
+  width: 72px; height: 72px; border-radius: 10px;
+  border: 1.5px dashed var(--accent); background: none;
+  color: var(--accent); font-size: 22px; cursor: pointer;
+  transition: transform .08s ease;
+}
+.ps-add:active { transform: scale(.94); }
+/* 分享卡片弹层 */
+.share-modal { text-align: center; }
+#share-canvas { width: 100%; max-width: 340px; border-radius: 14px; box-shadow: var(--shadow); }
+
 /* ---------------- 悬浮详情卡片 ---------------- */
 .detail-modal { max-width: 430px; max-height: 82vh; overflow-y: auto; text-align: left; }
 .td-title { font-family: var(--font-hand); font-size: 18px; line-height: 1.4; }

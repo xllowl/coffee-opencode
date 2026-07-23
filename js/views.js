@@ -375,6 +375,7 @@ const Views = (() => {
     let startX = 0, startY = 0, dx = 0, dragging = false, axis = null;
 
     wrap.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.vc-strip')) return; // 图片条带需要原生横向滑动，不接管左滑手势
       startX = e.clientX; startY = e.clientY;
       dx = wrap.classList.contains('swiped') ? -SWIPE_W : 0;
       dragging = true; axis = null;
@@ -437,8 +438,8 @@ const Views = (() => {
   }
 
   /* ---- 悬浮详情卡片 ---- */
-  /** 通用详情弹层：底部 关闭 / 编辑 按钮 */
-  function detailModal(bodyHtml, onEdit) {
+  /** 通用详情弹层：底部 关闭 / 分享(可选) / 编辑 按钮 */
+  function detailModal(bodyHtml, { onEdit, onShare } = {}) {
     const mask = document.createElement('div');
     mask.className = 'modal-mask';
     mask.innerHTML = `
@@ -446,11 +447,13 @@ const Views = (() => {
         ${bodyHtml}
         <div class="modal-btns">
           <button class="btn" data-act="no">关闭</button>
+          ${onShare ? '<button class="btn" data-act="share"><i class="fa-solid fa-share-nodes" data-emo="📤"></i> 分享</button>' : ''}
           <button class="btn btn-primary" data-act="edit"><i class="fa-solid fa-pen" data-emo="✏️"></i> 编辑</button>
         </div>
       </div>`;
     mask.addEventListener('click', (e) => {
       if (e.target === mask || e.target.dataset.act === 'no') mask.remove();
+      else if (e.target.dataset.act === 'share') { mask.remove(); onShare(); }
       else if (e.target.dataset.act === 'edit') { mask.remove(); onEdit(); }
     });
     document.body.appendChild(mask);
@@ -498,7 +501,7 @@ const Views = (() => {
       ${t.flavors?.length ? `<div class="ec-flavors" style="margin-top:8px;">${t.flavors.map((x) => `<span class="flavor-chip"${flavorStyle(x)}>${esc(x)}</span>`).join('')}</div>` : ''}
       ${t.notes ? `<div class="brew-note"><i class="fa-solid fa-note-sticky" data-emo="📝"></i>${esc(t.notes)}</div>` : ''}
       <div class="brew-date">${esc(prettyDate(e.date))} · ${esc(moodEmoji(e.mood))}</div>
-    `, () => { location.hash = '#/entry/edit/' + e.id; });
+    `, { onEdit: () => { location.hash = '#/entry/edit/' + e.id; } });
   }
 
   /** 探店记录详情：照片 + 出品 + 点评卡 + 官网 + 评分笔记 */
@@ -511,8 +514,9 @@ const Views = (() => {
       if (beanStr) extra = ` · ${beanStr}`;
     }
     const locLine = [v.area, v.location].filter(Boolean).join(' · ');
+    const pics = v.photos?.length ? v.photos : (v.photo ? [v.photo] : []);
     detailModal(`
-      ${v.photo ? `<img class="td-photo" src="${v.photo}" alt="">` : ''}
+      ${pics.length ? `<div class="vc-strip td-strip">${pics.map((src) => `<img src="${src}" alt="">`).join('')}</div>` : ''}
       <div class="td-title"><i class="fa-solid fa-store" data-emo="🏪"></i> ${esc(v.shopName)}${v.link ? ` <a class="vc-link" href="${esc(v.link)}" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square" data-emo="🔗"></i></a>` : ''}</div>
       <div class="ec-meta" style="margin-top:4px;">
         <span class="pill pill-visit">${esc(v.drinkType || '其他')}</span>${esc(v.drinkName || '')}${v.temperature ? `（${esc(v.temperature)}）` : ''}${esc(extra)}${v.price != null ? ` · ¥${v.price}` : ''}
@@ -525,7 +529,166 @@ const Views = (() => {
         ${v.notes ? `<span class="ec-notes">${esc(v.notes)}</span>` : ''}
       </div>
       <div class="brew-date">${esc(prettyDate(v.date))} · ${esc(moodEmoji(v.mood))}</div>
-    `, () => { location.hash = '#/visit/edit/' + v.id; });
+    `, { onEdit: () => { location.hash = '#/visit/edit/' + v.id; }, onShare: () => openShareCard(v) });
+  }
+
+  /* ---- 探店分享卡片：Canvas 生成图片 + 二维码 ---- */
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  /** 文字自动换行，返回最新 y */
+  function wrapText(ctx, text, x, y, maxW, lineH) {
+    let line = '';
+    for (const ch of text) {
+      if (ctx.measureText(line + ch).width > maxW && line) { ctx.fillText(line, x, y); y += lineH; line = ch; }
+      else line += ch;
+    }
+    if (line) { ctx.fillText(line, x, y); y += lineH; }
+    return y;
+  }
+
+  /** cover 裁剪绘制照片 */
+  function drawPhotoCover(ctx, src, x, y, w, h) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const s = Math.max(w / img.width, h / img.height);
+        const sw = w / s, sh = h / s, sx = (img.width - sw) / 2, sy = (img.height - sh) / 2;
+        ctx.save();
+        roundRectPath(ctx, x, y, w, h, 16);
+        ctx.clip();
+        ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+        ctx.restore();
+        resolve(y + h);
+      };
+      img.onerror = () => resolve(y);
+      img.src = src;
+    });
+  }
+
+  /** 在画布上绘制二维码（qrcode-generator CDN 加载失败时静默跳过） */
+  function drawQRCode(ctx, text, x, y, size) {
+    if (typeof qrcode === 'undefined') return;
+    try {
+      const qr = qrcode(0, 'M'); // 自动版本，容错率 M
+      qr.addData(text);
+      qr.make();
+      const n = qr.getModuleCount();
+      const cell = size / n;
+      ctx.fillStyle = '#fffdf8';
+      ctx.fillRect(x - 10, y - 10, size + 20, size + 20);
+      ctx.fillStyle = '#3e2f25';
+      for (let r = 0; r < n; r++) {
+        for (let c = 0; c < n; c++) {
+          if (qr.isDark(r, c)) ctx.fillRect(x + c * cell, y + r * cell, Math.ceil(cell), Math.ceil(cell));
+        }
+      }
+    } catch { /* 内容过长等异常时省略二维码 */ }
+  }
+
+  /** 打开分享卡片弹层 */
+  async function openShareCard(v) {
+    const mask = document.createElement('div');
+    mask.className = 'modal-mask';
+    mask.innerHTML = `
+      <div class="modal share-modal">
+        <canvas id="share-canvas" width="750" height="1040"></canvas>
+        <div class="modal-btns">
+          <button class="btn" data-act="no">关闭</button>
+          <button class="btn btn-primary" data-act="save"><i class="fa-solid fa-download" data-emo="💾"></i> 保存图片</button>
+        </div>
+      </div>`;
+    document.body.appendChild(mask);
+    const canvas = mask.querySelector('#share-canvas');
+    await drawShareCard(canvas, v);
+    Icons.fix(mask);
+    mask.addEventListener('click', (e) => {
+      if (e.target === mask || e.target.dataset.act === 'no') { mask.remove(); return; }
+      if (e.target.dataset.act === 'save') {
+        canvas.toBlob((blob) => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = `探店-${(v.shopName || 'share').replace(/[\\/:*?"<>|\s]/g, '')}.png`;
+          a.click();
+          URL.revokeObjectURL(a.href);
+          toast('图片已保存');
+        });
+      }
+    });
+  }
+
+  /** 绘制分享卡片：标题 / 店名 / 出品 / 评分 / 点评信息 / 笔记 / 照片 / 日期 / 二维码 */
+  async function drawShareCard(canvas, v) {
+    const ctx = canvas.getContext('2d');
+    const W = 750, H = 1040;
+    ctx.fillStyle = '#f5f0e8';
+    ctx.fillRect(0, 0, W, H);
+    // 卡片底
+    const cx = 40, cy = 40, cw = W - 80, ch = H - 80;
+    roundRectPath(ctx, cx, cy, cw, ch, 28);
+    ctx.fillStyle = '#fffdf8';
+    ctx.fill();
+    ctx.strokeStyle = '#e6dbc9';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    let y = cy + 64;
+    // 标题
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#6f4e37';
+    ctx.font = 'bold 30px "LXGW Wenkai", "Songti SC", serif';
+    ctx.fillText('咖啡手账 · 探店打卡', cx + 40, y);
+    y += 26;
+    ctx.strokeStyle = '#e6dbc9';
+    ctx.beginPath(); ctx.moveTo(cx + 40, y); ctx.lineTo(cx + cw - 40, y); ctx.stroke();
+    y += 52;
+    // 店名
+    ctx.fillStyle = '#3e2f25';
+    ctx.font = 'bold 44px "LXGW Wenkai", "Songti SC", serif';
+    y = wrapText(ctx, v.shopName || '', cx + 40, y, cw - 80, 56) + 6;
+    // 出品
+    ctx.fillStyle = '#6f4e37';
+    ctx.font = '28px Georgia, serif';
+    const drink = [v.drinkType, v.drinkName && v.drinkName + (v.temperature ? `（${v.temperature}）` : ''), v.price != null ? `¥${v.price}` : null].filter(Boolean).join(' · ');
+    if (drink) y = wrapText(ctx, drink, cx + 40, y, cw - 80, 40) + 8;
+    // 评分
+    ctx.fillStyle = '#c08552';
+    ctx.font = 'bold 36px Georgia, serif';
+    ctx.fillText(`★ ${v.rating ?? '—'} / 10`, cx + 40, y);
+    y += 48;
+    // 点评/商圈信息
+    ctx.fillStyle = '#9a8878';
+    ctx.font = '24px Georgia, serif';
+    const info = [v.dpRating != null ? `点评 ${v.dpRating}` : null, v.avgPrice != null ? `¥${v.avgPrice}/人` : null, [v.area, v.location].filter(Boolean).join(' · ') || null].filter(Boolean).join(' · ');
+    if (info) y = wrapText(ctx, info, cx + 40, y, cw - 80, 36) + 12;
+    // 笔记
+    if (v.notes) {
+      ctx.fillStyle = '#3e2f25';
+      ctx.font = '26px "LXGW Wenkai", "Songti SC", serif';
+      y = wrapText(ctx, v.notes, cx + 40, y + 6, cw - 80, 40) + 8;
+    }
+    // 照片（首图）
+    const pics = v.photos?.length ? v.photos : (v.photo ? [v.photo] : []);
+    if (pics[0]) y = await drawPhotoCover(ctx, pics[0], cx + 40, y + 8, cw - 80, 280) + 10;
+
+    // 底部：日期 + 二维码
+    const qrSize = 170;
+    const qrX = cx + cw - 40 - qrSize, qrY = cy + ch - 44 - qrSize;
+    drawQRCode(ctx, v.link || v.website || '咖啡手账', qrX, qrY, qrSize);
+    ctx.fillStyle = '#9a8878';
+    ctx.font = '20px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('扫码查看店铺', qrX + qrSize / 2, qrY - 12);
+    ctx.textAlign = 'left';
+    ctx.font = '24px Georgia, serif';
+    ctx.fillText(prettyDate(v.date), cx + 40, cy + ch - 52);
   }
 
   /** 空状态：大号装饰图标 + 文案 */
@@ -680,6 +843,8 @@ const Views = (() => {
     const locLine = [v.area, v.location].filter(Boolean).join(' · '); // 商圈 · 详细地址
     const hasDp = v.dpRating != null || v.avgPrice != null; // 有点评数据则渲染点评卡片
     const dpCard = dpCardHtml(v);
+    // 多图（photos 优先，兼容旧单张）：横向滑动条带
+    const pics = v.photos?.length ? v.photos : (v.photo ? [v.photo] : []);
     return `
       <div class="swipe-wrap" data-kind="visit" data-id="${v.id}">
       <div class="swipe-actions">
@@ -692,7 +857,6 @@ const Views = (() => {
           <span class="ec-mood">${esc(moodEmoji(v.mood))}</span>
         </div>
         <div class="ec-main-row">
-          ${v.photo ? `<img class="vc-photo" src="${v.photo}" alt="">` : ''}
           <div class="ec-main">
             <div class="ec-bean"><i class="fa-solid fa-store" data-emo="🏪"></i> ${esc(v.shopName)}${v.link ? ` <a class="vc-link" href="${esc(v.link)}" target="_blank" rel="noopener" title="打开店铺链接"><i class="fa-solid fa-arrow-up-right-from-square" data-emo="🔗"></i></a>` : ''}</div>
             <div class="ec-meta">
@@ -702,6 +866,7 @@ const Views = (() => {
             ${v.website ? `<a class="web-card" href="${esc(v.website)}" target="_blank" rel="noopener"><i class="fa-solid fa-globe" data-emo="🌐"></i> 官网 · ${esc(domainOf(v.website))}</a>` : ''}
           </div>
         </div>
+        ${pics.length ? `<div class="vc-strip">${pics.map((src) => `<img src="${src}" alt="" loading="lazy">`).join('')}</div>` : ''}
         <div class="ec-foot">
           <span class="ec-score">★ ${v.rating ?? '—'}</span>
           ${notes ? `<span class="ec-notes">${esc(notes)}</span>` : ''}
@@ -1855,7 +2020,9 @@ const Views = (() => {
 
   async function visitForm(id) {
     const editing = id ? await Store.visits.get(id) : null;
-    let photo = editing?.photo || null;      // 压缩后的 base64 照片（饮品/菜单/店面）
+    let photo = editing?.photo || null;      // 识别用照片（饮品/菜单/店面）
+    // 记录照片（多图，仅展示）：photos 优先，兼容旧数据单张 photo
+    let photos = editing?.photos?.length ? [...editing.photos] : (editing?.photo ? [editing.photo] : []);
     let drinkType = editing?.drinkType || '奶咖';
     let temperature = editing?.temperature || null; // 热 | 冰 | null
     let mood = editing?.mood || '😀';
@@ -1934,6 +2101,9 @@ const Views = (() => {
               </datalist>
             </label>
           </div>
+          <div class="f-label">记录照片（可多选上传，仅用于记录展示）</div>
+          <div class="photo-strip" id="photo-strip"></div>
+          <input type="file" id="file-photos" accept="image/*" multiple hidden>
           <div class="slider-row">
             <div class="sl-head"><span>评分</span><span class="sl-val" id="sv-rating">${editing?.rating ?? 7}</span></div>
             <input type="range" min="0" max="10" step="0.5" value="${editing?.rating ?? 7}" name="rating">
@@ -1979,6 +2149,29 @@ const Views = (() => {
       if (!pill) return;
       temperature = temperature === pill.dataset.t ? null : pill.dataset.t;
       $$('#temp-pills .drink-pill').forEach((x) => x.classList.toggle('sel', x.dataset.t === temperature));
+    });
+
+    /* ---- 记录照片：多选上传 / 删除 ---- */
+    const strip = $('#photo-strip');
+    const redrawStrip = () => {
+      strip.innerHTML = photos.map((src, i) => `
+        <div class="ps-thumb"><img src="${src}" alt=""><button type="button" data-i="${i}">×</button></div>`).join('')
+        + `<button type="button" class="ps-add" id="ps-add"><i class="fa-solid fa-plus" data-emo="＋"></i></button>`;
+      Icons.fix(strip);
+    };
+    redrawStrip();
+    strip.addEventListener('click', (e) => {
+      if (e.target.closest('#ps-add')) { $('#file-photos').click(); return; }
+      const del = e.target.closest('button[data-i]');
+      if (del) { photos.splice(+del.dataset.i, 1); redrawStrip(); }
+    });
+    $('#file-photos').addEventListener('change', async (ev) => {
+      const files = [...ev.target.files];
+      ev.target.value = '';
+      for (const f of files) {
+        try { photos.push(await ImageUtil.compress(f)); } catch { toast('图片处理失败，已跳过'); }
+      }
+      redrawStrip();
     });
 
     // 评分滑块实时数值
@@ -2182,7 +2375,9 @@ const Views = (() => {
         price: form.elements.price.value !== '' ? num(form.elements.price.value) : null,
         rating: num(form.elements.rating.value, 7),
         notes: form.elements.notes.value || '',
-        photo,
+        // 识别照片并入记录照片（去重），photos 为多图，photo 保留首图兼容旧逻辑
+        photos: (() => { const all = photo ? [photo, ...photos.filter((x) => x !== photo)] : [...photos]; return all; })(),
+        photo: (photo || photos[0] || null),
         mood,
         createdAt: editing?.createdAt || Date.now(),
       };
