@@ -305,12 +305,20 @@ const Views = (() => {
   }
 
   /* ================= 1. 首页 · 手账时间线 ================= */
+  let tlCtx = null; // 时间线数据上下文（悬浮详情卡用）
+
   async function timeline() {
-    const [entries, beans, preps, visits] = await Promise.all([
-      Store.entries.getAll(), Store.beans.getAll(), Store.preparations.getAll(), Store.visits.getAll(),
+    const [entries, beans, preps, visits, mills] = await Promise.all([
+      Store.entries.getAll(), Store.beans.getAll(), Store.preparations.getAll(), Store.visits.getAll(), Store.mills.getAll(),
     ]);
     const beanMap = Object.fromEntries(beans.map((b) => [b.id, b]));
     const prepMap = Object.fromEntries(preps.map((p) => [p.id, p]));
+    tlCtx = {
+      beanMap, prepMap,
+      millMap: Object.fromEntries(mills.map((m) => [m.id, m])),
+      entryMap: Object.fromEntries(entries.map((e) => [e.id, e])),
+      visitMap: Object.fromEntries(visits.map((v) => [v.id, v])),
+    };
 
     // 合并时间线：冲煮记录 + 探店记录，按日期倒序、同日按创建时间倒序
     const items = [
@@ -328,14 +336,18 @@ const Views = (() => {
         ${items.length ? items.map((it) => it.kind === 'brew' ? entryCard(it.data, beanMap, prepMap) : visitCard(it.data)).join('') : emptyHtml('还没有记录，冲第一杯吧', 'fa-mug-hot', '☕')}
       </section>`;
 
-    // 绑定卡片交互：点击进编辑、左滑删除
+    // 绑定卡片交互：点按 = 悬浮详情卡；左滑 = 修改 / 删除
     openSwipe = null;
     $$('.swipe-wrap').forEach((wrap) => {
       bindSwipe(wrap);
       wrap.querySelector('.entry-card').addEventListener('click', (e) => {
         if (e.target.closest('a')) return; // 点卡片内任何链接 → 新标签打开，不进入编辑
-        if (wrap.dataset.justSwiped === '1') { wrap.dataset.justSwiped = ''; return; } // 刚滑完，不触发跳转
+        if (wrap.dataset.justSwiped === '1') { wrap.dataset.justSwiped = ''; return; } // 刚滑完，不触发
         if (wrap.classList.contains('swiped')) { closeSwipe(wrap); return; }             // 展开态点击 = 收起
+        openRecordDetail(wrap); // 悬浮详情卡片
+      });
+      wrap.querySelector('.swipe-edit').addEventListener('click', (e) => {
+        e.stopPropagation();
         location.hash = (wrap.dataset.kind === 'visit' ? '#/visit/edit/' : '#/entry/edit/') + wrap.dataset.id;
       });
       wrap.querySelector('.swipe-del').addEventListener('click', (e) => {
@@ -346,7 +358,7 @@ const Views = (() => {
   }
 
   /* ---- 左滑删除 ---- */
-  const SWIPE_W = 88;      // 删除按钮宽度（展开位移）
+  const SWIPE_W = 160;     // 修改+删除两个按钮的总宽度（展开位移）
   let openSwipe = null;    // 当前处于展开态的卡片容器
 
   function closeSwipe(wrap) {
@@ -367,6 +379,8 @@ const Views = (() => {
       dx = wrap.classList.contains('swiped') ? -SWIPE_W : 0;
       dragging = true; axis = null;
       content.style.transition = 'none';
+      // 捕获指针：即使手指/鼠标移出卡片，up/cancel 也能送达，保证正确回弹或展开
+      try { wrap.setPointerCapture(e.pointerId); } catch { /* 不支持时忽略 */ }
     });
 
     wrap.addEventListener('pointermove', (e) => {
@@ -422,6 +436,98 @@ const Views = (() => {
     timeline(); // 重新渲染时间线
   }
 
+  /* ---- 悬浮详情卡片 ---- */
+  /** 通用详情弹层：底部 关闭 / 编辑 按钮 */
+  function detailModal(bodyHtml, onEdit) {
+    const mask = document.createElement('div');
+    mask.className = 'modal-mask';
+    mask.innerHTML = `
+      <div class="modal detail-modal">
+        ${bodyHtml}
+        <div class="modal-btns">
+          <button class="btn" data-act="no">关闭</button>
+          <button class="btn btn-primary" data-act="edit"><i class="fa-solid fa-pen" data-emo="✏️"></i> 编辑</button>
+        </div>
+      </div>`;
+    mask.addEventListener('click', (e) => {
+      if (e.target === mask || e.target.dataset.act === 'no') mask.remove();
+      else if (e.target.dataset.act === 'edit') { mask.remove(); onEdit(); }
+    });
+    document.body.appendChild(mask);
+    Icons.fix(mask);
+  }
+
+  function openRecordDetail(wrap) {
+    const { kind, id } = wrap.dataset;
+    if (kind === 'visit') openVisitDetail(tlCtx.visitMap[id]);
+    else openBrewDetail(tlCtx.entryMap[id]);
+  }
+
+  /** 冲煮记录详情：参数全览 + 分段注水 + 五维条形 + 风味 + 笔记 */
+  function openBrewDetail(e) {
+    if (!e) return;
+    const b = tlCtx.beanMap[e.beanId];
+    const p = tlCtx.prepMap[e.preparationId];
+    const m = tlCtx.millMap[e.millId];
+    const t = e.tasting || {};
+    const items = paramItems(e, p?.type);
+    const dims = [['酸质', 'acidity'], ['甜感', 'sweetness'], ['苦度', 'bitterness'], ['醇厚', 'body'], ['香气', 'aroma']];
+    const stepsHtml = e.brew?.steps?.length ? `
+      <div class="td-sec">分段注水</div>
+      <div class="td-steps">${e.brew.steps.map((s) => `
+        <div class="td-step"><span>${esc(s.time || '')}</span><span>${s.water ?? ''} g</span><span>${esc(s.note || '')}</span></div>`).join('')}
+      </div>` : '';
+    detailModal(`
+      <div class="td-title">${esc(b ? b.name : '（豆子已删除）')}</div>
+      ${b ? `<div class="bm-sub">${esc([b.roaster, [b.origin, b.region].filter(Boolean).join('·'), b.variety].filter(Boolean).join(' · '))}</div>` : ''}
+      <div class="bm-pills" style="margin-top:6px;">
+        ${b?.process ? `<span class="pill pill-process">${esc(b.process)}</span>` : ''}
+        ${b?.roastLevel ? `<span class="pill pill-roast">${esc(b.roastLevel)}</span>` : ''}
+        ${e.temperature ? `<span class="pill pill-visit">${esc(e.temperature)}</span>` : ''}
+      </div>
+      <div class="td-sec">冲煮参数</div>
+      <div class="td-grid">
+        <div class="td-kv"><span class="td-k">器具</span><span>${esc(p ? p.name : '—')}</span></div>
+        ${m ? `<div class="td-kv"><span class="td-k">磨豆机</span><span>${esc(m.name)}</span></div>` : ''}
+        ${items.map((it) => `<div class="td-kv"><span class="td-k"><i class="fa-solid ${it.ico}" data-emo="${it.emo}"></i></span><span>${esc(it.val)}</span></div>`).join('')}
+      </div>
+      ${stepsHtml}
+      <div class="td-sec">品鉴 · ${t.score ?? '—'} 分</div>
+      ${dims.map(([k, key]) => `
+        <div class="td-dim"><span class="td-label">${k}</span><span class="td-bar"><span style="width:${(num(t[key]) / 5) * 100}%"></span></span><span class="td-num">${t[key] ?? '—'}</span></div>`).join('')}
+      ${t.flavors?.length ? `<div class="ec-flavors" style="margin-top:8px;">${t.flavors.map((x) => `<span class="flavor-chip"${flavorStyle(x)}>${esc(x)}</span>`).join('')}</div>` : ''}
+      ${t.notes ? `<div class="brew-note"><i class="fa-solid fa-note-sticky" data-emo="📝"></i>${esc(t.notes)}</div>` : ''}
+      <div class="brew-date">${esc(prettyDate(e.date))} · ${esc(moodEmoji(e.mood))}</div>
+    `, () => { location.hash = '#/entry/edit/' + e.id; });
+  }
+
+  /** 探店记录详情：照片 + 出品 + 点评卡 + 官网 + 评分笔记 */
+  function openVisitDetail(v) {
+    if (!v) return;
+    let extra = '';
+    if (v.drinkType === '奶咖' && v.espressoBean) extra = ` · ${v.espressoBean}`;
+    else if (v.drinkType === '手冲') {
+      const beanStr = [v.beanOrigin, v.beanVariety, v.beanProcess].filter(Boolean).join(' ');
+      if (beanStr) extra = ` · ${beanStr}`;
+    }
+    const locLine = [v.area, v.location].filter(Boolean).join(' · ');
+    detailModal(`
+      ${v.photo ? `<img class="td-photo" src="${v.photo}" alt="">` : ''}
+      <div class="td-title"><i class="fa-solid fa-store" data-emo="🏪"></i> ${esc(v.shopName)}${v.link ? ` <a class="vc-link" href="${esc(v.link)}" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square" data-emo="🔗"></i></a>` : ''}</div>
+      <div class="ec-meta" style="margin-top:4px;">
+        <span class="pill pill-visit">${esc(v.drinkType || '其他')}</span>${esc(v.drinkName || '')}${v.temperature ? `（${esc(v.temperature)}）` : ''}${esc(extra)}${v.price != null ? ` · ¥${v.price}` : ''}
+      </div>
+      ${dpCardHtml(v)}
+      ${v.website ? `<a class="web-card" href="${esc(v.website)}" target="_blank" rel="noopener"><i class="fa-solid fa-globe" data-emo="🌐"></i> 官网 · ${esc(domainOf(v.website))}</a>` : ''}
+      ${locLine ? `<div class="ec-sub">${esc(locLine)}</div>` : ''}
+      <div class="ec-foot" style="margin-top:8px;">
+        <span class="ec-score">★ ${v.rating ?? '—'}</span>
+        ${v.notes ? `<span class="ec-notes">${esc(v.notes)}</span>` : ''}
+      </div>
+      <div class="brew-date">${esc(prettyDate(v.date))} · ${esc(moodEmoji(v.mood))}</div>
+    `, () => { location.hash = '#/visit/edit/' + v.id; });
+  }
+
   /** 空状态：大号装饰图标 + 文案 */
   function emptyHtml(text, ico = 'fa-book-open', emo = '📔') {
     return `<div class="empty"><span class="emo"><i class="fa-solid ${ico}" data-emo="${emo}"></i></span>${esc(text)}</div>`;
@@ -461,21 +567,8 @@ const Views = (() => {
     </div>`;
   }
 
-  /** 冲煮卡片：左侧圆形方法图标 + 评分；右侧 豆子/烘焙商/产地/参数/笔记（参考 Beanconqueror 布局） */
-  function entryCard(e, beanMap, prepMap) {
-    const b = beanMap[e.beanId];
-    const p = prepMap[e.preparationId];
-    const notes = (e.tasting?.notes || '').trim();
-    const type = p?.type;
-
-    // 左侧方法图标：优先器具自选 PNG；老数据无该字段按类型取默认图；再缺用 FA 图标兜底
-    const TYPE_ICO = { 'pour-over': 'fa-filter', immersion: 'fa-flask', espresso: 'fa-gauge-high', 'cold-brew': 'fa-glass-water' };
-    const mImg = p?.methodImg !== undefined && p?.methodImg !== null ? p.methodImg : METHOD_IMG_BY_TYPE[type];
-    const methodInner = mImg
-      ? `<img src="./${esc(mImg)}" alt="${esc(p?.name || '')}">`
-      : `<i class="fa-solid ${TYPE_ICO[type] || 'fa-mug-hot'}" data-emo="☕"></i>`;
-
-    // 参数行（按器具类型取舍；icon 选用 FA 免费库中相近者）
+  /** 冲煮参数项构建（卡片与悬浮详情共用） */
+  function paramItems(e, type) {
     const br = e.brew || {};
     const items = [];
     if (num(br.dose)) items.push({ ico: 'fa-weight-hanging', emo: '⚖️', val: `${num(br.dose)} g` });
@@ -492,12 +585,53 @@ const Views = (() => {
     if (br.totalTime) items.push({ ico: 'fa-clock', emo: '⏱', val: br.totalTime });
     if (num(br.dose) && num(br.water)) items.push({ ico: 'fa-scale-balanced', emo: '%', val: `1:${(num(br.water) / num(br.dose)).toFixed(1)}` });
     if (e.temperature) items.push({ ico: e.temperature === '冰' ? 'fa-snowflake' : 'fa-fire-flame-simple', emo: e.temperature === '冰' ? '❄️' : '🔥', val: e.temperature });
-    const paramsHtml = items.map((it) =>
+    return items;
+  }
+
+  /** 仿大众点评卡片（时间线卡片与悬浮详情共用） */
+  function dpCardHtml(v) {
+    const hasDp = v.dpRating != null || v.avgPrice != null;
+    if (!hasDp) return '';
+    const dpPct = Math.max(0, Math.min(100, ((v.dpRating || 0) / 5) * 100));
+    return `
+      <${v.link ? `a href="${esc(v.link)}" target="_blank" rel="noopener"` : 'div'} class="dp-card">
+        <div class="dp-head"><i class="fa-solid fa-star" data-emo="⭐"></i> 大众点评${v.link ? '<span class="dp-go">查看详情 ›</span>' : ''}</div>
+        <div class="dp-body">
+          <div class="dp-name">${esc(v.shopName)}</div>
+          <div class="dp-row">
+            ${v.dpRating != null ? `<span class="dp-stars" style="--pct:${dpPct}%">★★★★★</span><span class="dp-score">${v.dpRating}</span>` : ''}
+            ${v.avgPrice != null ? `<span>¥${v.avgPrice}/人</span>` : ''}
+          </div>
+          ${v.area ? `<div class="dp-row">${esc(v.area)}</div>` : ''}
+          ${v.location ? `<div class="dp-row">${esc(v.location)}</div>` : ''}
+        </div>
+      </${v.link ? 'a' : 'div'}>`;
+  }
+
+  /** 冲煮卡片：左侧圆形方法图标 + 评分；右侧 豆子/烘焙商/产地/参数/笔记（参考 Beanconqueror 布局） */
+  function entryCard(e, beanMap, prepMap) {
+    const b = beanMap[e.beanId];
+    const p = prepMap[e.preparationId];
+    const notes = (e.tasting?.notes || '').trim();
+    const type = p?.type;
+
+    // 左侧方法图标：优先器具自选 PNG；老数据无该字段按类型取默认图；再缺用 FA 图标兜底
+    const TYPE_ICO = { 'pour-over': 'fa-filter', immersion: 'fa-flask', espresso: 'fa-gauge-high', 'cold-brew': 'fa-glass-water' };
+    const mImg = p?.methodImg !== undefined && p?.methodImg !== null ? p.methodImg : METHOD_IMG_BY_TYPE[type];
+    const methodInner = mImg
+      ? `<img src="./${esc(mImg)}" alt="${esc(p?.name || '')}">`
+      : `<i class="fa-solid ${TYPE_ICO[type] || 'fa-mug-hot'}" data-emo="☕"></i>`;
+
+    // 参数行（按器具类型取舍；icon 选用 FA 免费库中相近者）
+    const paramsHtml = paramItems(e, type).map((it) =>
       `<span class="bp-item"><i class="fa-solid ${it.ico}" data-emo="${it.emo}"></i>${esc(it.val)}</span>`).join('');
 
     return `
       <div class="swipe-wrap" data-kind="brew" data-id="${e.id}">
-      <div class="swipe-actions"><button type="button" class="swipe-del"><i class="fa-solid fa-trash-can" data-emo="🗑"></i>删除</button></div>
+      <div class="swipe-actions">
+        <button type="button" class="swipe-edit"><i class="fa-solid fa-pen" data-emo="✏️"></i>修改</button>
+        <button type="button" class="swipe-del"><i class="fa-solid fa-trash-can" data-emo="🗑"></i>删除</button>
+      </div>
       <article class="card entry-card swipe-content">
         <div class="brew-card">
           <div class="brew-left">
@@ -545,24 +679,13 @@ const Views = (() => {
     }
     const locLine = [v.area, v.location].filter(Boolean).join(' · '); // 商圈 · 详细地址
     const hasDp = v.dpRating != null || v.avgPrice != null; // 有点评数据则渲染点评卡片
-    // 仿大众点评卡片：品牌头 + 店名 + 星级(按分数填充) + 人均 + 商圈/地址，整体可点击跳链接
-    const dpPct = Math.max(0, Math.min(100, ((v.dpRating || 0) / 5) * 100));
-    const dpCard = hasDp ? `
-      <${v.link ? `a href="${esc(v.link)}" target="_blank" rel="noopener"` : 'div'} class="dp-card">
-        <div class="dp-head"><i class="fa-solid fa-star" data-emo="⭐"></i> 大众点评${v.link ? '<span class="dp-go">查看详情 ›</span>' : ''}</div>
-        <div class="dp-body">
-          <div class="dp-name">${esc(v.shopName)}</div>
-          <div class="dp-row">
-            ${v.dpRating != null ? `<span class="dp-stars" style="--pct:${dpPct}%">★★★★★</span><span class="dp-score">${v.dpRating}</span>` : ''}
-            ${v.avgPrice != null ? `<span>¥${v.avgPrice}/人</span>` : ''}
-          </div>
-          ${v.area ? `<div class="dp-row">${esc(v.area)}</div>` : ''}
-          ${v.location ? `<div class="dp-row">${esc(v.location)}</div>` : ''}
-        </div>
-      </${v.link ? 'a' : 'div'}>` : '';
+    const dpCard = dpCardHtml(v);
     return `
       <div class="swipe-wrap" data-kind="visit" data-id="${v.id}">
-      <div class="swipe-actions"><button type="button" class="swipe-del"><i class="fa-solid fa-trash-can" data-emo="🗑"></i>删除</button></div>
+      <div class="swipe-actions">
+        <button type="button" class="swipe-edit"><i class="fa-solid fa-pen" data-emo="✏️"></i>修改</button>
+        <button type="button" class="swipe-del"><i class="fa-solid fa-trash-can" data-emo="🗑"></i>删除</button>
+      </div>
       <article class="card entry-card swipe-content">
         <div class="ec-head">
           <span class="ec-date">${esc(prettyDate(v.date))}</span>
@@ -818,8 +941,12 @@ const Views = (() => {
       <section class="page">
         <h2 class="page-title">${editing ? '编辑豆子' : '添加豆子'}</h2>
 
-        <button type="button" class="btn-photo" id="btn-photo"><i class="fa-solid fa-camera" data-emo="📷"></i> 拍摄咖啡卡片识别</button>
+        <div class="photo-btn-row">
+          <button type="button" class="btn-photo" id="btn-photo"><i class="fa-solid fa-camera" data-emo="📷"></i> 拍摄识别</button>
+          <button type="button" class="btn-photo" id="btn-upload"><i class="fa-solid fa-image" data-emo="🖼"></i> 上传图片识别</button>
+        </div>
         <input type="file" id="file-photo" accept="image/*" capture="environment" hidden>
+        <input type="file" id="file-upload" accept="image/*" hidden>
         <div id="recog-status"></div>
         <div id="photo-preview">${cardPhoto ? `<img src="${cardPhoto}" alt="卡片照片">` : ''}</div>
 
@@ -887,13 +1014,9 @@ const Views = (() => {
     // 风味轮选择
     $('#btn-fw').addEventListener('click', () => openFlavorWheel(tags, redrawTags));
 
-    /* ---- 拍照识别流程 ---- */
+    /* ---- 拍照 / 相册上传识别流程（两个入口共用） ---- */
     const status = $('#recog-status');
-    $('#btn-photo').addEventListener('click', () => $('#file-photo').click());
-    $('#file-photo').addEventListener('change', async (ev) => {
-      const file = ev.target.files[0];
-      ev.target.value = ''; // 允许重选同一文件
-      if (!file) return;
+    const onPhotoFile = async (file) => {
       try {
         status.innerHTML = `<div class="recog-loading">正在压缩照片</div>`;
         // 1) canvas 压缩：最长边 1280px，JPEG 0.8
@@ -903,7 +1026,11 @@ const Views = (() => {
       } catch (err) {
         showRecogError(err);
       }
-    });
+    };
+    $('#btn-photo').addEventListener('click', () => $('#file-photo').click());
+    $('#btn-upload').addEventListener('click', () => $('#file-upload').click());
+    $('#file-photo').addEventListener('change', (ev) => { const f = ev.target.files[0]; ev.target.value = ''; if (f) onPhotoFile(f); });
+    $('#file-upload').addEventListener('change', (ev) => { const f = ev.target.files[0]; ev.target.value = ''; if (f) onPhotoFile(f); });
 
     async function runRecognize() {
       try {
@@ -1743,8 +1870,12 @@ const Views = (() => {
       <section class="page">
         <h2 class="page-title">${editing ? '编辑探店记录' : '<i class="fa-solid fa-store" data-emo="🏪"></i> 探店打卡'}</h2>
 
-        <button type="button" class="btn-photo" id="btn-photo"><i class="fa-solid fa-camera" data-emo="📷"></i> 拍照识别出品 / 菜单</button>
+        <div class="photo-btn-row">
+          <button type="button" class="btn-photo" id="btn-photo"><i class="fa-solid fa-camera" data-emo="📷"></i> 拍摄识别</button>
+          <button type="button" class="btn-photo" id="btn-upload"><i class="fa-solid fa-image" data-emo="🖼"></i> 上传图片识别</button>
+        </div>
         <input type="file" id="file-photo" accept="image/*" capture="environment" hidden>
+        <input type="file" id="file-upload" accept="image/*" hidden>
         <div id="recog-status"></div>
         <div id="photo-preview">${photo ? `<img src="${photo}" alt="探店照片">` : ''}</div>
 
@@ -1951,20 +2082,20 @@ const Views = (() => {
       $$('#mood-row button').forEach((x) => x.classList.toggle('sel', x === btn));
     });
 
-    /* ---- 拍照识别出品 / 菜单 ---- */
+    /* ---- 拍照 / 相册上传识别出品（两个入口共用） ---- */
     const status = $('#recog-status');
-    $('#btn-photo').addEventListener('click', () => $('#file-photo').click());
-    $('#file-photo').addEventListener('change', async (ev) => {
-      const file = ev.target.files[0];
-      ev.target.value = '';
-      if (!file) return;
+    const onPhotoFile = async (file) => {
       try {
         status.innerHTML = `<div class="recog-loading">正在压缩照片</div>`;
         photo = await ImageUtil.compress(file);
         $('#photo-preview').innerHTML = `<img src="${photo}" alt="探店照片">`;
         await runRecognize();
       } catch (err) { showRecogError(err); }
-    });
+    };
+    $('#btn-photo').addEventListener('click', () => $('#file-photo').click());
+    $('#btn-upload').addEventListener('click', () => $('#file-upload').click());
+    $('#file-photo').addEventListener('change', (ev) => { const f = ev.target.files[0]; ev.target.value = ''; if (f) onPhotoFile(f); });
+    $('#file-upload').addEventListener('change', (ev) => { const f = ev.target.files[0]; ev.target.value = ''; if (f) onPhotoFile(f); });
 
     async function runRecognize() {
       try {
